@@ -124,6 +124,91 @@ class ValidationSeverity(StrEnum):
     ERROR = "error"
 
 
+# --- Turbine Health Monitoring ---------------------------------------------
+#: Column carrying the 0-100 health score produced by the health module.
+HEALTH_SCORE: Final[str] = "health_score"
+#: Column carrying the :class:`HealthClass` label derived from the score.
+HEALTH_CLASS: Final[str] = "health_class"
+#: Column carrying the :class:`OperatingRegime` assigned to an observation.
+OPERATING_REGIME: Final[str] = "operating_regime"
+
+
+class HealthClass(StrEnum):
+    """Operational banding of the turbine health score.
+
+    Ordered from best to worst.  The band boundaries live in
+    ``configs/health_model.yaml -> health.classes`` and are applied by
+    :func:`wind_turbine_pm.health.health_class.classify_health`.
+    """
+
+    HEALTHY = "healthy"
+    MONITOR = "monitor"
+    DEGRADED = "degraded"
+    CRITICAL = "critical"
+
+
+#: Health classes ordered from best to worst; index doubles as a severity rank.
+HEALTH_CLASS_ORDER: Final[tuple[HealthClass, ...]] = (
+    HealthClass.HEALTHY,
+    HealthClass.MONITOR,
+    HealthClass.DEGRADED,
+    HealthClass.CRITICAL,
+)
+
+
+class OperatingRegime(StrEnum):
+    """Coarse operating point a turbine is in at a given observation.
+
+    Sensor values are only interpretable relative to the regime: a gearbox
+    temperature that is normal at rated power is abnormal while idling.  Every
+    regime-relative feature and drift baseline in the health module is
+    conditioned on this label.
+    """
+
+    OFFLINE = "offline"
+    IDLE = "idle"
+    LOW_LOAD = "low_load"
+    MEDIUM_LOAD = "medium_load"
+    HIGH_LOAD = "high_load"
+    CURTAILED = "curtailed"
+
+
+#: Regimes in which the machine is meaningfully producing power.
+PRODUCING_REGIMES: Final[tuple[OperatingRegime, ...]] = (
+    OperatingRegime.LOW_LOAD,
+    OperatingRegime.MEDIUM_LOAD,
+    OperatingRegime.HIGH_LOAD,
+)
+
+
+class DriftSeverity(StrEnum):
+    """Severity of a detected sensor-drift signal."""
+
+    NONE = "none"
+    WARNING = "warning"
+    ALARM = "alarm"
+
+
+class DriftDirection(StrEnum):
+    """Direction of a detected drift relative to the sensor's own baseline."""
+
+    UPWARD = "upward"
+    DOWNWARD = "downward"
+    NONE = "none"
+
+
+#: Human-readable labels for the drivetrain components the health module scores.
+COMPONENT_DISPLAY_NAMES: Final[dict[str, str]] = {
+    "gearbox": "gearbox",
+    "drivetrain": "drivetrain and main bearing",
+    "generator": "generator",
+    "lubrication": "lubrication system",
+    "hydraulic": "hydraulic system",
+    "brake": "brake system",
+    "rotor": "rotor",
+}
+
+
 #: Units for each numeric channel, part of the published data contract.
 COLUMN_UNITS: Final[dict[str, str]] = {
     WIND_SPEED: "m/s",

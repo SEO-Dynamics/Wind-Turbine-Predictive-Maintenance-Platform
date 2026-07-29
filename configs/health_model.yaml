@@ -1,0 +1,507 @@
+# ---------------------------------------------------------------------------
+# Turbine Health Monitoring Module configuration.
+#
+# Every key lives under the single top-level `health` namespace. That is
+# deliberate: this file is deep-merged on top of base/data/features/
+# failure_model, and a shared top-level key such as `model:`, `training:` or
+# `serving:` would silently overwrite the Failure Prediction Module's settings.
+# Namespacing makes the two modules composable in one merged Config object.
+#
+# Load it with:
+#     from wind_turbine_pm.health.config import load_health_config
+#     cfg = load_health_config()
+# ---------------------------------------------------------------------------
+health:
+  module: turbine_health_monitoring
+  version: "1.0.0"
+
+  # -------------------------------------------------------------------------
+  # Sensor validation rules
+  #
+  # `hard_min` / `hard_max` mirror `configs/data.yaml -> validation.
+  # physical_ranges` (the instrument's plausible range; outside it the reading
+  # is a sensor fault, not an extreme measurement). `warn_above` / `alarm_above`
+  # are *operating envelope* limits: values that are physically possible but
+  # indicate a machine running outside its healthy envelope.
+  #
+  # Provenance of the envelope limits, recorded per rule in `source`:
+  #   expert_judgement    - typical O&M alarm practice for a 2 MW geared turbine
+  #   industry_standard   - ISO 10816-21 / ISO 20816-1 vibration severity bands
+  #                         for gearbox-drivetrain wind turbines
+  #   data_analysis       - the P99 of the healthy population in this dataset
+  #                         (degradation_level == 0), rounded outward
+  #
+  # These are advisory thresholds for a synthetic fleet. They MUST be
+  # re-derived from the operator's own turbine type, control strategy and
+  # historical alarm log before operational use.
+  # -------------------------------------------------------------------------
+  sensor_rules:
+    # A signal whose value moves less than `stuck_tolerance` (in its own unit)
+    # across `stuck_window_hours` is treated as frozen - a classic dead-sensor
+    # signature that range checks alone never catch.
+    stuck_window_hours: 6
+    # Fraction of a window's samples that may violate rules before the whole
+    # window's data quality is reported as degraded.
+    max_flagged_fraction: 0.20
+    rules:
+      vibration:
+        component: drivetrain
+        unit: "mm/s RMS"
+        hard_min: 0.0
+        hard_max: 25.0
+        warn_above: 7.5
+        alarm_above: 11.0
+        direction: high_is_bad
+        max_rate_per_hour: 8.0
+        stuck_tolerance: 0.02
+        source: industry_standard
+        rationale: >-
+          ISO 10816-21 zone boundaries for gearbox drivetrains: zone B/C
+          (7.1 mm/s) is unrestricted-operation to restricted-operation, zone C/D
+          (11.0 mm/s) is the damage-risk boundary.
+      gearbox_temperature:
+        component: gearbox
+        unit: degC
+        hard_min: -30.0
+        hard_max: 160.0
+        warn_above: 75.0
+        alarm_above: 90.0
+        direction: high_is_bad
+        max_rate_per_hour: 15.0
+        stuck_tolerance: 0.05
+        source: expert_judgement
+        rationale: >-
+          Gearbox oil sump alarms on 2 MW class machines are commonly set at
+          75 degC warning / 90 degC trip; sustained operation above the warning
+          accelerates lubricant ageing.
+      bearing_temperature:
+        component: drivetrain
+        unit: degC
+        hard_min: -30.0
+        hard_max: 160.0
+        warn_above: 70.0
+        alarm_above: 85.0
+        direction: high_is_bad
+        max_rate_per_hour: 12.0
+        stuck_tolerance: 0.05
+        source: expert_judgement
+        rationale: >-
+          Main-bearing temperature alarms are typically 15-20 K below the
+          gearbox limits because the bearing has less thermal mass.
+      generator_temperature:
+        component: generator
+        unit: degC
+        hard_min: -30.0
+        hard_max: 200.0
+        warn_above: 115.0
+        alarm_above: 135.0
+        direction: high_is_bad
+        max_rate_per_hour: 25.0
+        stuck_tolerance: 0.05
+        source: industry_standard
+        rationale: >-
+          Class F winding insulation is rated to 155 degC hot-spot; warning is
+          set with margin for the winding-to-sensor gradient.
+      oil_temperature:
+        component: lubrication
+        unit: degC
+        hard_min: -30.0
+        hard_max: 130.0
+        warn_above: 70.0
+        alarm_above: 85.0
+        direction: high_is_bad
+        max_rate_per_hour: 12.0
+        stuck_tolerance: 0.05
+        source: expert_judgement
+        rationale: >-
+          Mineral gear oil oxidises rapidly above ~80 degC; the warning gives an
+          intervention window before the alarm.
+      oil_pressure:
+        component: lubrication
+        unit: bar
+        hard_min: 0.0
+        hard_max: 12.0
+        warn_below: 3.6
+        alarm_below: 2.8
+        direction: low_is_bad
+        max_rate_per_hour: 3.0
+        stuck_tolerance: 0.01
+        source: data_analysis
+        rationale: >-
+          Healthy-population P1 of this dataset is ~4.0 bar; falling lubrication
+          pressure with rising oil temperature is the classic oil-film loss
+          signature.
+      hydraulic_pressure:
+        component: hydraulic
+        unit: bar
+        hard_min: 0.0
+        hard_max: 300.0
+        warn_below: 150.0
+        alarm_below: 120.0
+        direction: low_is_bad
+        max_rate_per_hour: 60.0
+        stuck_tolerance: 0.1
+        source: data_analysis
+        rationale: >-
+          Pitch/brake accumulator pressure below ~150 bar reduces the available
+          pitch authority; below 120 bar the safety chain is compromised.
+      brake_temperature:
+        component: brake
+        unit: degC
+        hard_min: -30.0
+        hard_max: 400.0
+        warn_above: 180.0
+        alarm_above: 260.0
+        direction: high_is_bad
+        max_rate_per_hour: 120.0
+        stuck_tolerance: 0.05
+        source: expert_judgement
+        rationale: >-
+          Repeated high-energy braking above ~180 degC glazes the pads; 260 degC
+          approaches the disc material limit.
+      rotor_speed:
+        component: rotor
+        unit: rpm
+        hard_min: 0.0
+        hard_max: 25.0
+        warn_above: 17.0
+        alarm_above: 19.5
+        direction: high_is_bad
+        max_rate_per_hour: 20.0
+        stuck_tolerance: 0.01
+        source: expert_judgement
+        rationale: >-
+          Nominal rotor speed for this class is ~14 rpm; sustained overspeed
+          loads the drivetrain well beyond its design duty.
+      generator_speed:
+        component: generator
+        unit: rpm
+        hard_min: 0.0
+        hard_max: 2200.0
+        warn_above: 1850.0
+        alarm_above: 2000.0
+        direction: high_is_bad
+        max_rate_per_hour: 1500.0
+        stuck_tolerance: 0.5
+        source: expert_judgement
+        rationale: >-
+          Synchronous speed is 1500 rpm; the converter allows super-synchronous
+          operation with a margin below the mechanical overspeed trip.
+
+  # -------------------------------------------------------------------------
+  # Operating regimes
+  #
+  # A turbine's sensor values are only interpretable relative to what it is
+  # doing. 60 degC in the gearbox is normal at rated power and abnormal while
+  # idling. Every regime-relative feature and every drift baseline in this
+  # module is conditioned on the regime assigned here.
+  # -------------------------------------------------------------------------
+  operating_regimes:
+    # "threshold" is deterministic, explainable and needs no artifact.
+    # "kmeans" clusters (wind_speed, power_output, rotor_speed) and maps the
+    # cluster centres onto the same ordered labels; it is offered because the
+    # brief asks for it, but the threshold method is the default because an
+    # operator can audit it.
+    method: threshold
+    cut_in_wind_speed: 3.0
+    cut_out_wind_speed: 25.0
+    # At or below this output the machine is not meaningfully producing.
+    idle_power_kw: 25.0
+    # Wind-speed band edges (m/s) separating low / medium / high load.
+    low_medium_edge: 7.0
+    medium_high_edge: 11.0
+    # Producing below this fraction of the reference power curve while the wind
+    # is above cut-in is treated as curtailment rather than as a fault.
+    curtailment_power_ratio: 0.55
+    kmeans:
+      n_clusters: 4
+      features: [wind_speed, power_output, rotor_speed]
+      max_samples: 20000
+      n_init: 10
+
+  # -------------------------------------------------------------------------
+  # Health-score feature engineering
+  # -------------------------------------------------------------------------
+  features:
+    condition_sensors:
+      - vibration
+      - gearbox_temperature
+      - bearing_temperature
+      - generator_temperature
+      - oil_temperature
+      - oil_pressure
+      - hydraulic_pressure
+      - power_output
+      - rotor_speed
+    # Trailing statistics windows, in hours.
+    windows_hours: [6, 24, 72]
+    rolling_stats: [mean, std, max]
+    # Slopes and differences capture "getting worse", which is what a health
+    # score is about, as opposed to "is currently bad".
+    slope_windows_hours: [24, 72]
+    diff_hours: [24]
+    baseline_window_hours: 168
+
+    # Statistical / frequency-domain condition indicators. These are the
+    # classic vibration CIs; computed on a trailing window they need no FFT and
+    # stay leakage-safe.
+    signal_shape:
+      enabled: true
+      sensors: [vibration, gearbox_temperature, oil_pressure]
+      window_hours: 24
+      stats: [rms, crest_factor, kurtosis, skew, peak_to_peak, hf_ratio, zero_crossing_rate]
+
+    # Deviation from the turbine's own past behaviour *inside the same operating
+    # regime*. This is what stops a turbine on a windy site from being scored as
+    # unhealthy simply because it runs hotter than the fleet.
+    regime_relative:
+      enabled: true
+      sensors:
+        - vibration
+        - gearbox_temperature
+        - bearing_temperature
+        - generator_temperature
+        - oil_temperature
+        - oil_pressure
+      min_periods: 48
+      robust_z_floor: 1.0e-6
+
+    # Rule-derived features: how close the machine is running to its envelope.
+    rule_features:
+      enabled: true
+      window_hours: 24
+
+    # Drift statistics (CUSUM / EWMA) enter the model as features as well as
+    # being reported on their own.
+    drift_features:
+      enabled: true
+
+    # Never model-facing: keys, events and the ground-truth columns the label
+    # itself is derived from.
+    exclude_columns:
+      - timestamp
+      - turbine_id
+      - failure_event
+      - maintenance_event
+      - operational_status
+      - degradation_level
+      - failure_mode
+      - episode_id
+      - hours_to_failure
+      - failure_within_48h
+      - health_score_target
+      - operating_regime
+      - split
+
+  # -------------------------------------------------------------------------
+  # Sensor drift detection
+  #
+  # Drift is measured on the robust z-score of each sensor against the
+  # turbine's own past-only, regime-conditioned baseline, so a genuine change
+  # in operating point is not mistaken for a drifting instrument.
+  # -------------------------------------------------------------------------
+  drift:
+    enabled: true
+    sensors:
+      - vibration
+      - gearbox_temperature
+      - bearing_temperature
+      - generator_temperature
+      - oil_pressure
+    # History required before any drift verdict is produced.
+    min_periods: 72
+    cusum:
+      # Slack `k` in sigma units: shifts smaller than k are ignored, which is
+      # what stops the statistic accumulating on noise alone.
+      k: 0.5
+      # Decision interval `h` in sigma units. h=5 with k=0.5 is the textbook
+      # setting for detecting a 1-sigma shift with a long in-control ARL.
+      h: 5.0
+      # Reset an arm to zero once it reaches `h` (Page's restart scheme).
+      #
+      # This must stay on. Without it the statistic is unbounded in the presence
+      # of any sustained residual: measured on this dataset the arms reach
+      # hundreds to thousands of sigma, every row after the first crossing
+      # reports an alarm forever, and 92% of all observations take the maximum
+      # drift penalty - a constant offset on every health score rather than a
+      # signal. With the restart the statistic stays bounded and a crossing
+      # means "drift detected here", so persistence can be counted.
+      reset_after_signal: true
+      # Trailing window over which crossings are counted to grade severity.
+      # One week: long enough that a genuine slow drift re-crosses several times,
+      # short enough that a fault repaired a month ago no longer counts.
+      signal_window_hours: 168
+    ewma:
+      # Smoothing constant; 0.1 weights roughly the last 20 observations.
+      lambda: 0.1
+      # Control limit in standard-error units.
+      l_sigma: 3.0
+    isolation_forest:
+      enabled: true
+      n_estimators: 200
+      contamination: 0.02
+      max_samples: 4096
+      # Score above this (0-1, higher = more anomalous) counts as multivariate
+      # drift evidence.
+      anomaly_threshold: 0.62
+    severity:
+      # EWMA statistic / control-limit ratio at which a signal is a warning /
+      # alarm. The EWMA is a weighted mean of residuals and is therefore already
+      # bounded, so a ratio is the right measure for it.
+      warning_ratio: 1.0
+      alarm_ratio: 1.6
+      # CUSUM severity is graded on persistence instead of magnitude, because the
+      # restart scheme bounds the statistic. Crossings within
+      # `cusum.signal_window_hours`: 1 is a warning, this many is an alarm.
+      #
+      # These are only the fallback for an uncalibrated artifact. In normal
+      # operation the thresholds come from `calibration` below.
+      alarm_signals: 3
+
+    # Empirical calibration of the persistence thresholds.
+    #
+    # The textbook CUSUM constants assume independent residuals. Hourly SCADA
+    # channels are strongly autocorrelated, so those constants produce a detector
+    # that fires in 5-8% of rows even on channels whose residual is correctly
+    # scaled - and measured on this dataset the crossing count does not separate
+    # healthy machines from degraded ones at all. Rather than inherit a constant
+    # the data violates, the thresholds are set from the fleet's own healthy
+    # population so that the in-control alert rate is a chosen number.
+    #
+    # "Healthy" is taken from the *ground-truth* label, not from the model's own
+    # output, and only from the training split - so the thresholds can never be
+    # derived from the data being judged.
+    calibration:
+      enabled: true
+      # Ground-truth health score at or above which a training row counts as
+      # healthy for calibration purposes.
+      healthy_min_score: 95.0
+      # Share of healthy observations allowed to raise a warning / an alarm.
+      target_warning_rate: 0.05
+      target_alarm_rate: 0.01
+      min_healthy_rows: 500
+    penalty:
+      # Health-score points deducted per drifting sensor and in total. Drift is
+      # evidence that the *measurement* is untrustworthy or that the machine has
+      # moved off its own baseline; both justify a lower health score, but the
+      # penalty is capped so drift alone can never manufacture a Critical.
+      per_warning_points: 2.5
+      per_alarm_points: 5.0
+      multivariate_points: 5.0
+      max_points: 15.0
+
+  # -------------------------------------------------------------------------
+  # Health score model
+  # -------------------------------------------------------------------------
+  model:
+    name: health_score
+    version: "1.0.0"
+    artifact_filename: health_model.joblib
+    drift_model_filename: health_drift_detector.joblib
+    background_filename: health_background.parquet
+    metadata_filename: health_model_metadata.json
+    metrics_filename: health_metrics.json
+    comparison_filename: health_model_comparison.csv
+    dataset_filename: health_dataset.parquet
+    features_filename: health_features.parquet
+    spec_filename: health_feature_spec.json
+
+  target:
+    name: health_score_target
+    # Column carrying the ground-truth degradation state in [0, 1].
+    #
+    # In this repository it comes from the synthetic generator. On a real fleet
+    # it must come from an independent source - inspection reports, oil-analysis
+    # results, borescope findings or a certified condition-monitoring index -
+    # and NOT from the same SCADA channels the features are built from.
+    source_column: degradation_level
+    scale: 100.0
+    # Rows whose operating state makes the label meaningless.
+    exclude_states: [maintenance, fault]
+
+  training:
+    candidates:
+      mean_baseline:
+        enabled: true
+        params:
+          strategy: mean
+      ridge:
+        enabled: true
+        params:
+          alpha: 1.0
+      random_forest:
+        enabled: true
+        params:
+          n_estimators: 250
+          max_depth: 16
+          min_samples_leaf: 20
+          max_features: sqrt
+          n_jobs: -1
+      hist_gradient_boosting:
+        enabled: true
+        params:
+          max_iter: 350
+          learning_rate: 0.07
+          max_depth: 6
+          min_samples_leaf: 40
+          l2_regularization: 1.0
+          early_stopping: true
+          validation_fraction: 0.15
+          n_iter_no_change: 25
+    selection:
+      # Ranked on the validation split only.
+      #
+      # `mae_degraded` - mean absolute error restricted to observations whose
+      # true health is below the Monitor boundary - is the primary criterion
+      # rather than overall MAE. Most observations are healthy, so overall MAE
+      # is dominated by the easy majority and a model can win it while being
+      # useless exactly where the score has to be trusted.
+      primary_metric: mae_degraded
+      tie_breakers: [mae, rmse, spearman]
+      primary_tolerance: 0.05
+      # A candidate whose rank correlation with the true degradation state is
+      # below this is rejected outright: a score that does not order turbines
+      # correctly cannot drive maintenance prioritisation.
+      min_spearman: 0.50
+      # Reject anything not clearly better than predicting the mean.
+      max_mae_ratio_vs_baseline: 0.85
+
+  # -------------------------------------------------------------------------
+  # Health classification
+  #
+  # Boundaries on the 0-100 score. Chosen so that Monitor begins where the
+  # score model's own error band starts to matter, and Critical corresponds to
+  # the severity range from which the synthetic episodes actually progress to
+  # failure. Re-derive them against real inspection outcomes before use.
+  # -------------------------------------------------------------------------
+  classes:
+    healthy_min: 80.0
+    monitor_min: 60.0
+    degraded_min: 40.0
+    # Below `degraded_min` -> critical.
+    #
+    # Dynamic adaptation: when enabled, the boundaries are shifted by the
+    # fleet's own score distribution so that a fleet-wide sensor change does not
+    # silently move every turbine into Monitor. The shift is clamped so the
+    # bands can never invert or move more than `max_shift`.
+    adaptive:
+      enabled: false
+      reference_quantile: 0.5
+      max_shift: 10.0
+
+  # Component roll-up. Each component's score is built from the rule margins and
+  # regime-relative deviations of its own sensors, so a degraded component can
+  # be named rather than just a number being reported.
+  components:
+    gearbox: [gearbox_temperature, vibration]
+    drivetrain: [bearing_temperature, vibration, rotor_speed]
+    generator: [generator_temperature, generator_speed]
+    lubrication: [oil_temperature, oil_pressure]
+    hydraulic: [hydraulic_pressure]
+    brake: [brake_temperature]
+
+  serving:
+    # Enough history for the 72 h windows and the drift baseline to exist.
+    min_history_hours: 72
+    max_batch_turbines: 200
+    top_k_factors: 5
