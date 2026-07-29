@@ -1,14 +1,19 @@
-# Handoff — Failure Prediction Module
+# Handoff — Failure Prediction and Turbine Health Monitoring
 
-**From:** Ozan (Stage 1 — Failure Prediction)
-**To:** Stage 2 (Turbine Health Monitoring) and Stage 3 (Anomaly Detection & Maintenance
-Decision Support)
+**From:** Stage 1 (Failure Prediction) and Stage 2 (Turbine Health Monitoring)
+**To:** Stage 3 (Anomaly Detection & Maintenance Decision Support)
 **Branch:** `feature/ozan-failure-prediction`
-**Module version:** 1.0.0
-**Date:** 2026-07-29
+**Module versions:** failure prediction 1.0.0 · turbine health monitoring 1.0.0
+**Date:** 2026-07-30
 
-This document is the contract between my module and yours. Everything here is stable and
-safe to build on. Read §9 before changing anything.
+This document is the contract between the built modules and yours. Everything here is
+stable and safe to build on. Read §9 before changing anything.
+
+> **Stage 2 is now implemented.** The extension points in §6.1 and §6.2 were written as
+> instructions for building it; they are kept below, annotated with what was actually
+> built, because §6.3 (Anomaly Detection) follows the same pattern and the worked example
+> is more useful than the sketch. §12 is the new part: the Health Monitoring contract that
+> Stage 3 can consume.
 
 ---
 
@@ -36,8 +41,27 @@ safe to build on. Read §9 before changing anything.
 | **Service** | `FailurePredictionService` — the single prediction path | `services/` |
 | API | FastAPI, 9 endpoints, structured errors, lazy loading | `api/` |
 | Dashboard | Streamlit, 6 sections, degrades gracefully | `dashboard/` |
-| Tests | 162 tests, ~14 s, deterministic | `tests/` |
 | Ops | Dockerfile, compose (API + dashboard + opt-in pipeline), GitHub Actions CI, Makefile | root |
+
+### Stage 2 — Turbine Health Monitoring
+
+| Area | What exists | Where |
+|---|---|---|
+| Configuration | `health_model.yaml`, entirely under the `health` namespace so nothing can overwrite a failure-prediction key | `configs/health_model.yaml`, `health/config.py` |
+| **Contracts** | `HealthAssessment`, `BatchHealthAssessment`, `FleetHealthSummary`, `ComponentHealth`, `SensorDriftSignal`, `SensorRuleViolation`, `HealthClassBands`, `HealthModelMetadata` | `contracts/health.py` |
+| Constants | `HealthClass`, `OperatingRegime`, `DriftSeverity`, `DriftDirection`, `HEALTH_SCORE`, `HEALTH_CLASS`, `OPERATING_REGIME` | `constants.py` |
+| Sensor rules | Physical limits plus operating-envelope limits with provenance and rationale per rule; frozen-signal and impossible-slew detection | `health/sensor_rules.py` |
+| Operating regimes | Threshold (default, auditable) and k-means methods onto one ordered label set | `health/regimes.py` |
+| Features | 239 features in 8 groups, one leakage-safe entry point | `health/health_features.py` |
+| Drift detection | CUSUM with Page's restart, EWMA, Isolation Forest, and empirical threshold calibration against the healthy population | `health/drift.py` |
+| Health score | Regression onto condition, `mae_degraded`-led selection with guard rails | `health/health_score.py` |
+| Classification | Score-to-class banding, optional adaptive bands, capped drift penalty | `health/health_class.py` |
+| Components | Auditable rule- and baseline-driven per-component roll-up | `health/components.py` |
+| Narratives | Grounded explanation and advisory text | `health/narratives.py` |
+| **Service** | `HealthMonitoringService` — the single assessment path, window and prepared modes | `services/health_monitoring_service.py` |
+| API | 6 endpoints under `/health-monitoring` | `api/routers/health_monitoring.py` |
+| Dashboard | Fleet Health page, 7 sections | `dashboard/pages/fleet_health.py` |
+| Tests | 369 tests total (~210 of them health), deterministic | `tests/` |
 
 ---
 
@@ -284,7 +308,13 @@ behaviour for your endpoints — orchestrators need liveness separate from readi
 
 ## 6. Extension points
 
-### 6.1 Adding a Health Monitoring router
+### 6.1 Adding a Health Monitoring router — ✅ built
+
+> Implemented as `api/routers/health_monitoring.py` with the prefix
+> `/health-monitoring`. One note learned in the doing: **do not use `/health` as a module
+> prefix.** That path is the platform liveness probe used by the Docker health check and
+> by CI, so taking it would break both. The recipe below is otherwise exactly what was
+> followed, and §6.3 should follow it too.
 
 1. Create `src/wind_turbine_pm/api/routers/health_monitoring.py`:
 
@@ -312,13 +342,15 @@ MODULE_ROUTERS = [
 
 3. Move your module out of `planned_modules` in the `root()` handler.
 
-### 6.2 Adding a Health Monitoring dashboard page
+### 6.2 Adding a Health Monitoring dashboard page — ✅ built
 
-1. Create `dashboard/pages/health_monitoring.py` exposing `render() -> None`.
+> Implemented as `dashboard/pages/fleet_health.py`.
+
+1. Create `dashboard/pages/fleet_health.py` exposing `render() -> None`.
 2. Replace the placeholder entry in `dashboard/app.py`:
 
 ```python
-(Page("Turbine Health Monitoring", health_monitoring.render, available=True),)
+(Page("Turbine Health Monitoring", fleet_health.render, available=True),)
 ```
 
 3. Reuse `dashboard/components/` — `missing_artifact_notice`, `metric_row`, `risk_badge`,
@@ -386,21 +418,29 @@ make install                       # pip install -r requirements.txt && pip inst
 # If `import wind_turbine_pm` fails after an editable install:
 export PYTHONPATH=src
 
-# Full pipeline (~2.5 min)
+# Both module pipelines against one shared dataset
+make pipeline-all
+
+# Failure prediction (~2.5 min)
 make pipeline                      # python scripts/run_failure_pipeline.py
+
+# Turbine health monitoring (~1 min once the raw data exists)
+make health-pipeline               # python scripts/run_health_pipeline.py
 
 # Stage by stage
 python scripts/generate_synthetic_data.py
 python scripts/prepare_data.py
 python scripts/train_failure_model.py
 python scripts/evaluate_failure_model.py
+python scripts/prepare_health_data.py
+python scripts/train_health_model.py
 
 # Services
 make api                           # uvicorn wind_turbine_pm.api.main:app --reload
 make dashboard                     # streamlit run dashboard/app.py
 
 # Quality
-make test                          # pytest        (162 tests, ~14 s)
+make test                          # pytest        (369 tests, ~70 s)
 make lint                          # ruff check .
 make format                        # ruff format . && ruff check --fix .
 
@@ -462,6 +502,7 @@ artifacts depend on them. Changing them is a breaking change for the whole platf
 | `contracts/observations.py` | Shared input schema for every module |
 | `contracts/predictions.py` | Shared output schema; the dashboard renders against it |
 | `contracts/metadata.py` | Every published model serialises this; changing it invalidates saved artifacts |
+| `contracts/health.py` | Health output schemas; the API and dashboard both render against them |
 | `constants.py` | Column names and enums used platform-wide; a rename breaks saved data |
 | `utils/paths.py` | Path resolution for every module |
 | `utils/io.py` | Artifact IO and the missing-artifact error contract |
@@ -487,11 +528,15 @@ are not.
 Anything under a new module namespace — new routers, new dashboard pages, new services,
 new configs, new artifacts prefixed with your module name.
 
-### 🔵 Failure-prediction internals — please leave alone
+### 🔵 Module internals — please leave alone
 
-`data/synthetic.py`, `data/preprocessing.py`, `features/failure_features.py`,
-`models/*`, `explainability/*`, `services/failure_prediction_service.py`,
-`api/routers/failure.py`, `dashboard/pages/failure_prediction.py`.
+Failure prediction: `data/synthetic.py`, `data/preprocessing.py`,
+`features/failure_features.py`, `models/*`, `explainability/*`,
+`services/failure_prediction_service.py`, `api/routers/failure.py`,
+`dashboard/pages/failure_prediction.py`.
+
+Turbine health monitoring: `health/*`, `services/health_monitoring_service.py`,
+`api/routers/health_monitoring.py`, `dashboard/pages/fleet_health.py`.
 
 If you need behaviour from these, call them. If you need *different* behaviour, add a
 config option rather than editing the logic — nearly everything is already
@@ -530,5 +575,142 @@ Start with:
    faster answer than a docstring
 
 Then open an issue on the repository.
+
+---
+
+## 12. Turbine Health Monitoring contract (for Stage 3)
+
+Everything in this section is stable and safe to consume.
+
+### 12.1 Consuming an assessment
+
+Use the service, never the model file:
+
+```python
+from wind_turbine_pm.health.config import get_health_config
+from wind_turbine_pm.services.health_monitoring_service import get_health_service
+
+service = get_health_service()           # process-wide, lazily loaded, cached
+if service.is_ready:
+    assessment = service.assess_from_window(window)   # a shared TurbineWindow
+```
+
+`HealthAssessment` subclasses `BasePrediction`, so it already carries `turbine_id`,
+`timestamp`, `model_version` and `advisory_only`. The health-specific fields:
+
+| Field | Meaning |
+|---|---|
+| `health_score` | Published 0-100 score. **This is the number to use.** |
+| `raw_health_score` | The model's own estimate, before the drift deduction |
+| `drift_penalty` | Points deducted; `health_score == max(raw - penalty, 0)` is enforced by the contract |
+| `health_class` | `healthy` / `monitor` / `degraded` / `critical` |
+| `operating_regime` | Operating point the assessment was made in |
+| `data_quality` | Share of the assessed window that passed the sensor validity checks |
+| `component_health` | Per-component roll-up, worst first |
+| `drift_signals` | Only signals that fired; an empty list means no drift |
+| `rule_violations` | Envelope and validity findings |
+| `top_factors` | Largest condition deviations, as shared `RiskFactor` objects |
+
+Two assessment entry points, and they can legitimately disagree:
+
+* `assess_from_window(window)` — computes features from the raw window. Use this for live
+  data. Needs at least `service.minimum_history_hours()` of history.
+* `assess_from_prepared(frame, features, turbine_id=..., as_of=...)` — uses an
+  already-built feature matrix. Use this when you have the prepared artifacts, and use it
+  for anything that must agree with `score_frame()`.
+
+The difference is not a bug: expanding baselines and drift statistics depend on how much
+history the caller supplied, so a short window is less informed rather than wrong.
+
+### 12.2 Bulk scoring and fleet roll-up
+
+```python
+scored = service.score_frame(dataset, features)   # one row per observation
+summary = service.fleet_summary(scored)           # FleetHealthSummary
+```
+
+`score_frame` returns `turbine_id`, `timestamp`, `operating_regime`,
+`raw_health_score`, `health_score` and `health_class`. It deliberately does **not**
+assemble component roll-ups or narratives per row — that would be wasted work for a
+fleet-sized frame where only the latest row per turbine is displayed.
+
+### 12.3 Combining health with failure risk
+
+For the unified score in §6.4, the two modules answer different questions and should be
+combined as different evidence, not averaged:
+
+* failure probability — *"is something about to break in the next 48 hours?"* (sharp,
+  event-driven, has a threshold)
+* health score — *"what condition is this machine in, and is it getting worse?"* (slow,
+  condition-driven, has bands)
+
+A turbine can be Healthy with a high failure probability (a sudden fault signature on an
+otherwise sound machine) or Degraded with a low one (worn but not near failure). Both
+cases are operationally meaningful, so **do not collapse them into one number without
+retaining both**. `HealthAssessment.component_health` is the part that says *where* to
+send an engineer, which the failure probability cannot.
+
+Also note that `drift_signals` are about the **instrument**, not the machine. Feed them
+into a data-quality or confidence term, not into the severity of the machine's condition.
+
+### 12.4 Artifacts
+
+All health artifacts are prefixed `health_`, so nothing collides with `failure_*`:
+
+| Artifact | Path |
+|---|---|
+| Estimator | `artifacts/models/health_model.joblib` |
+| Drift detector | `artifacts/models/health_drift_detector.joblib` |
+| Feature background | `artifacts/models/health_background.parquet` |
+| Metadata | `artifacts/metadata/health_model_metadata.json` |
+| Metrics | `artifacts/metrics/health_metrics.json` |
+| Candidate comparison | `artifacts/metrics/health_model_comparison.csv` |
+| Error by band | `artifacts/metrics/health_error_by_band.csv` |
+| Data quality | `artifacts/metrics/health_data_quality.json` |
+| Prepared dataset | `data/processed/health_dataset.parquet` |
+| Prepared features | `data/processed/health_features.parquet` |
+| Feature spec | `data/processed/health_feature_spec.json` |
+| Figures | `artifacts/figures/health_*.png` |
+
+Read metadata through `HealthModelMetadata.model_validate(...)` rather than raw JSON, so a
+corrupted artifact fails loudly. `health/persistence.py` has a path helper per artifact —
+use those instead of composing paths yourself.
+
+### 12.5 Reusable pieces you may want
+
+| Piece | Why you might want it |
+|---|---|
+| `health/regimes.py` → `attach_regimes` | Regime conditioning applies to anomaly detection too: an anomaly at idle is not the same as one at rated power |
+| `health/sensor_rules.py` → `evaluate_rules` | Envelope and validity checks, and `data_quality()` as a confidence input |
+| `health/drift.py` → `DriftCalibration` | The pattern for calibrating a detector against a healthy reference period rather than a textbook constant. **Read the class docstring before choosing control limits for your own detector** — the autocorrelation problem it documents applies to any control chart on this data |
+| `health/drift.py` → `regime_conditioned_z` | Past-only robust z-score against a turbine's own regime-restricted baseline |
+| `health/evaluation.py` | Regression figures: predicted-vs-actual, error by band, class confusion |
+| `health/narratives.py` → `humanise_health_feature` | Feature-name humanisation that already covers the health suffixes |
+
+### 12.6 Configuration namespacing — please copy this
+
+`configs/health_model.yaml` puts **every** key under a single top-level `health:`
+namespace. That is deliberate: the file is deep-merged on top of `base` / `data` /
+`features` / `failure_model`, so a shared top-level key such as `model:`, `training:` or
+`serving:` would silently overwrite the Failure Prediction Module's settings. Namespace
+your module the same way (`anomaly:`), and load it with a module-specific loader like
+`health/config.py`.
+
+### 12.7 Health-specific limitations
+
+Beyond §8:
+
+1. **The health target comes from the simulator's `degradation_level`.** On a real fleet it
+   must come from a source independent of the SCADA channels the features are built from.
+   `build_health_target` raises with that instruction rather than inventing a target.
+2. **The drift detector is not validated against real calibration drift.** This dataset
+   contains none, so its thresholds are calibrated only to control the false-alarm rate on
+   the healthy population. Its ability to catch a genuinely drifting instrument is
+   untested. Do not present it as a validated instrument-fault detector.
+3. **Component scores are rule- and baseline-driven, not model-derived.** They are
+   auditable but will not always agree with the overall score, which is fleet-trained.
+4. **Class boundaries and envelope limits are configuration**, chosen for a synthetic 2 MW
+   fleet, and must be re-derived against real inspection outcomes and the operator's own
+   alarm history.
 
 Good luck. 🌬️

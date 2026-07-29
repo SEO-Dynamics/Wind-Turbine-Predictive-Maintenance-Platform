@@ -18,6 +18,13 @@
 > not a validated real-world maintenance solution. It has never been evaluated against
 > measured failures on operating turbines.
 
+**This card covers the Failure Prediction model only.** The platform also publishes a
+Turbine Health Monitoring model, documented in
+[`docs/MODEL_CARD_HEALTH.md`](docs/MODEL_CARD_HEALTH.md). The two answer different
+questions — *"is something about to break?"* versus *"what condition is this machine in?"* —
+and must not be substituted for one another. A turbine can be Healthy with a high failure
+probability, or Degraded with a low one; both are operationally meaningful.
+
 ---
 
 ## 1. Model overview

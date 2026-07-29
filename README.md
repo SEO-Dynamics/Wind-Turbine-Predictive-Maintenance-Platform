@@ -3,29 +3,35 @@
 [![CI](https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
-[![Tests](https://img.shields.io/badge/tests-162%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-390%20passing-brightgreen.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Data: synthetic](https://img.shields.io/badge/data-synthetic-orange.svg)](#9-synthetic-data-disclosure)
-[![Status: advisory only](https://img.shields.io/badge/status-advisory%20only-red.svg)](#26-limitations)
+[![Status: advisory only](https://img.shields.io/badge/status-advisory%20only-red.svg)](#27-limitations)
 
-> **Module 1 of 3 — Failure Prediction.** This repository currently contains the Failure
-> Prediction Module only. Turbine Health Monitoring and Anomaly Detection are planned
-> follow-on stages and are **not implemented** — see [the roadmap](#27-future-modules).
+> **Modules 1 and 2 of 3 — Failure Prediction and Turbine Health Monitoring.** Both are
+> implemented and serve from one API and one dashboard. Anomaly Detection & Maintenance
+> Decision Support is a planned follow-on stage and is **not implemented** — see
+> [the roadmap](#28-future-modules).
 
 ---
 
 ## 3. Executive summary
 
-This module estimates the probability that a wind turbine will experience a **failure
-within the next 48 hours**, from SCADA sensor history, and explains why.
+Two modules answer two different questions about the same fleet, from the same SCADA
+history:
 
-It is a complete, production-shaped system rather than a notebook: physics-grounded data
-generation, a validation layer, leakage-safe feature engineering, chronological
-validation with an embargo, four compared model families, cost-based threshold
-optimisation, SHAP explanations, a reusable prediction service, a FastAPI backend, a
-Streamlit dashboard, 162 tests, Docker and CI.
+* **Failure Prediction** — *"is something about to break?"* Estimates the probability that
+  a turbine will experience a **failure within the next 48 hours**, and explains why.
+* **Turbine Health Monitoring** — *"what condition is this machine in, and is it getting
+  worse?"* Scores current condition **0-100**, bands it into Healthy / Monitor / Degraded /
+  Critical, attributes it to named components, and cross-checks it against sensor drift.
 
-**Headline result on held-out test data (synthetic):**
+Both are production-shaped rather than notebooks: physics-grounded data generation, a
+validation layer, leakage-safe feature engineering, chronological validation with an
+embargo, compared model families with guard-railed selection, grounded explanations,
+reusable services, one FastAPI backend, one Streamlit dashboard, 390 tests, Docker and CI.
+
+**Failure Prediction — held-out test data (synthetic):**
 
 | Metric | Test | Validation |
 |---|---|---|
@@ -40,7 +46,22 @@ At a base rate of 2.2%, the model catches **84% of failures** while flagging onl
 observations. A stratified dummy baseline reaches PR-AUC 0.024 on the same data, so the
 signal is learned rather than an artefact of the class balance.
 
-**All output is advisory.** See [Limitations](#26-limitations).
+**Turbine Health Monitoring — held-out test data (synthetic):**
+
+| Metric | Test | Meaning |
+|---|---|---|
+| MAE | 6.46 | Mean absolute error in score points |
+| **MAE on degraded** | **6.27** | Error where the true score is below 60 — the primary selection metric |
+| RMSE | 7.16 | |
+| Spearman | 0.599 | Rank correlation with true condition — does it order turbines correctly |
+| **Class agreement** | **0.973** | Share placed in the correct health band |
+| Optimistic rate | 0.000-0.043 | Share placed in a *healthier* band than the truth, per band |
+
+A mean-prediction baseline reaches MAE 11.58 and MAE-on-degraded 58.67, so the score is
+learned. Selection is led by error **on degraded observations** rather than overall error,
+because 88% of observations are healthy and an overall figure is carried by that majority.
+
+**All output is advisory.** See [Limitations](#27-limitations).
 
 ---
 
@@ -64,9 +85,9 @@ three explicit design decisions in this module:
 
 ---
 
-## 5. Failure Prediction Module scope
+## 5. Module scope
 
-**In scope (implemented and working):**
+**Failure Prediction — in scope, implemented and working:**
 
 - SCADA data generation / ingestion, validation, preprocessing
 - 48-hour failure target with documented edge-case handling
@@ -75,12 +96,28 @@ three explicit design decisions in this module:
 - Four model families trained, compared and ranked on validation only
 - Threshold optimisation (F2 and cost methods)
 - Risk banding, SHAP explanations, narrative generation, advisory recommendations
-- Reusable `FailurePredictionService`, FastAPI backend, Streamlit dashboard
-- Tests, Docker, CI, model card, handoff document
+- Reusable `FailurePredictionService`
 
-**Deliberately out of scope** (future modules — contracts exist, logic does not):
-fleet health scoring, sensor-drift monitoring, unsupervised anomaly detection, a unified
-cross-model risk score, and maintenance prioritisation across models.
+**Turbine Health Monitoring — in scope, implemented and working:**
+
+- Sensor validation rules: physical limits plus operating-envelope limits, each with its
+  provenance and rationale, including frozen-signal and impossible-slew detection
+- Operating-regime detection (threshold and k-means) conditioning everything downstream
+- Leakage-safe health feature engineering (239 features across 8 groups)
+- 0-100 condition regression with guard-railed, `mae_degraded`-led selection
+- Health classification into Healthy / Monitor / Degraded / Critical, with optional
+  adaptive bands
+- Sensor-drift detection (CUSUM, EWMA, Isolation Forest) with thresholds calibrated
+  against the fleet's own healthy population, and a capped drift penalty
+- Auditable per-component roll-up naming which subsystem is driving the score
+- Reusable `HealthMonitoringService`
+
+**Shared across both:** one FastAPI backend, one Streamlit dashboard, 390 tests, Docker, CI,
+a model card per module and a handoff contract.
+
+**Deliberately out of scope** (Stage 3 — contracts exist, logic does not): unsupervised
+anomaly detection, a unified cross-model risk score, and maintenance prioritisation across
+models.
 
 ---
 
@@ -93,48 +130,72 @@ cross-model risk score, and maintenance prioritisation across models.
 | **Honest metrics** | PR-AUC, recall, F2 and false-negative rate lead. Accuracy is reported but never used to select. |
 | **Cost-aware threshold** | Optimised on validation against an explicit (hypothetical) cost matrix. Never 0.50 by default. |
 | **Stable selection** | Near-ties in the primary metric are broken by recall/F2, so the winner does not flip on sub-percent noise. |
-| **Grounded explanations** | Narratives are generated from actual SHAP values; when attribution is unavailable the text says so rather than inventing drivers. |
-| **One prediction path** | API and dashboard both call the same service. Prediction logic is not duplicated. |
-| **Graceful degradation** | Missing artifacts produce actionable messages with the exact command to run — never a traceback. |
+| **Grounded explanations** | Narratives are generated from actual SHAP values (failure) or actual rule margins and own-baseline deviations (health); when there is no evidence the text says so rather than inventing drivers. |
+| **One prediction path per module** | API and dashboard call the same service. Prediction logic is not duplicated, and the two dashboard views of a turbine are derived from the same feature matrix so they cannot disagree. |
+| **Graceful degradation** | Missing artifacts produce actionable messages with the exact command to run — never a traceback. Each module degrades independently. |
+| **Regime conditioning** | A sensor value is judged against what the machine was doing: every health baseline is conditioned on the operating regime, so a windy site is not scored unhealthy for running hot. |
+| **Calibrated detectors, not textbook constants** | Drift limits are set from the fleet's own healthy population with a recorded false-alarm rate, because the textbook control-chart constants assume independent residuals that hourly SCADA data does not provide. |
+| **Auditable attribution** | Component scores trace to a limit an engineer can check against the raw trend, which the dashboard plots beside them, rather than to a model decomposition the training objective never constrained. |
 
 ---
 
 ## 7. System architecture
 
+Both modules share the ingestion, validation and cleaning layers and the same raw dataset,
+then diverge into their own feature pipeline, model and service.
+
 ```mermaid
 flowchart TD
     A["SCADA data<br/>(synthetic generator or CSV/Parquet export)"] --> B["Validation<br/>schema · ranges · duplicates · chronology"]
     B --> C["Preprocessing<br/>past-only imputation, per turbine"]
-    C --> D["Target creation<br/>failure_within_48h"]
-    D --> E["Leakage-safe feature engineering<br/>lag · rolling · trend · interaction · turbine-relative · time"]
-    E --> F["Temporal split<br/>train → embargo → valid → embargo → test"]
-    F --> G["Model training and comparison<br/>Dummy · LogReg · RandomForest · HistGB"]
-    G --> H["Threshold optimisation<br/>validation split only"]
-    H --> I["Artifacts<br/>model · metadata · threshold · metrics · figures"]
-    I --> J["FailurePredictionService<br/>single source of prediction logic"]
-    J --> K["FastAPI"]
-    J --> L["Streamlit dashboard"]
 
-    subgraph FUTURE ["Future modules — NOT IMPLEMENTED"]
+    subgraph FAILURE ["Failure Prediction Module"]
         direction TB
-        M["Health Monitoring Module<br/>fleet health scoring · drift"]
+        D["Target creation<br/>failure_within_48h"] --> E["Leakage-safe features<br/>lag · rolling · trend · interaction · turbine-relative · time"]
+        E --> F["Temporal split<br/>train → embargo → valid → embargo → test"]
+        F --> G["Training and comparison<br/>Dummy · LogReg · RandomForest · HistGB"]
+        G --> H["Threshold optimisation<br/>validation split only"]
+        H --> I["Artifacts<br/>failure_*"]
+        I --> J["FailurePredictionService"]
+    end
+
+    subgraph HEALTH ["Turbine Health Monitoring Module"]
+        direction TB
+        P["Operating regimes<br/>threshold or k-means"] --> Q["Health target<br/>100 × (1 − degradation)"]
+        Q --> R["Leakage-safe features<br/>rolling · trend · signal-shape · regime-relative · rule · drift · physical"]
+        R --> S["Temporal split<br/>same boundaries and embargo"]
+        S --> T["Training and comparison<br/>Mean · Ridge · RandomForest · HistGB<br/>ranked on MAE-on-degraded"]
+        T --> U["Drift detectors + threshold calibration<br/>fitted on the healthy training population"]
+        U --> V["Artifacts<br/>health_*"]
+        V --> W["HealthMonitoringService"]
+    end
+
+    C --> D
+    C --> P
+    J --> K["FastAPI<br/>/failure · /health-monitoring"]
+    W --> K
+    J --> L["Streamlit dashboard<br/>two pages"]
+    W --> L
+
+    subgraph FUTURE ["Stage 3 — NOT IMPLEMENTED"]
+        direction TB
         N["Anomaly Detection Module<br/>unsupervised detection"]
         O["Unified Maintenance Decision<br/>combined risk · prioritisation"]
     end
 
-    E -.->|"shared feature utilities"| M
     C -.->|"shared observation contract"| N
-    J -.->|"shared prediction contract"| O
-    M -.-> O
+    J -.->|"failure probability"| O
+    W -.->|"health assessment + components"| O
     N -.-> O
 
     style FUTURE fill:#f5f5f5,stroke:#999,stroke-dasharray: 6 4
-    style I fill:#e6f0fb,stroke:#2b6cb0
-    style J fill:#e6f0fb,stroke:#2b6cb0
+    style FAILURE fill:#eef5fc,stroke:#2b6cb0
+    style HEALTH fill:#eefaf2,stroke:#2f855a
 ```
 
 Dashed edges are **extension points**, not existing code. See
-[`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) for how to attach a module to each.
+[`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) for how to attach a module to each, and §12
+of that document for the health contract Stage 3 can consume.
 
 ---
 
@@ -573,7 +634,217 @@ language ("shut down", "automatically", "guaranteed").
 
 ---
 
-## 21. API
+## 21. Turbine Health Monitoring Module
+
+The second module. It shares the platform's data contract, cleaning layer, feature
+primitives and validation, and adds a condition-scoring pipeline of its own. Everything it
+configures lives under a single `health:` namespace in `configs/health_model.yaml`, so a
+deep-merge can never overwrite a Failure Prediction setting.
+
+### Why it is a separate pipeline, not a second head on the same model
+
+Failure prediction is rewarded for finding **sharp pre-failure signatures** in a 48-hour
+window. Health scoring asks what condition the machine is in *now* and whether it is
+trending worse, which needs slower statistics, condition indicators borrowed from vibration
+analysis, and above all **regime conditioning**. The two share cleaning and primitives and
+diverge after that.
+
+### Operating regimes — why a reading needs context
+
+A sensor value is only interpretable relative to what the machine was doing. 60 °C in the
+gearbox is unremarkable at rated power and a warning sign while idling. Every
+regime-relative feature, every drift baseline and every component score is conditioned on
+one of six labels:
+
+`offline` · `idle` · `low_load` · `medium_load` · `high_load` · `curtailed`
+
+Two methods are implemented. **`threshold`** is the default because an operator can audit
+it: every boundary is a number in configuration and the same input always produces the same
+label with no fitted artifact in between. **`kmeans`** clusters `(wind_speed, power_output,
+rotor_speed)` and maps the centres onto the same ordered labels, for fleets whose power
+curve is not known.
+
+`curtailed` is deliberately separated from the load bands: a curtailed machine looks "cold
+for its wind speed" and would otherwise poison the baseline of whichever band it was pooled
+into. Observed distribution on the 20-turbine dataset: 48.5% medium load, 23.5% low load,
+16.9% idle, 9.9% high load, 1.2% curtailed.
+
+### Sensor validation rules — two different questions
+
+Conflating these is how condition monitoring goes wrong:
+
+1. **Is this measurement believable?** A gearbox at 999 °C is an instrument fault, not a hot
+   gearbox. Hard limits mirror the platform's `validation.physical_ranges`, and a test
+   asserts the two never disagree.
+2. **Is this machine inside its healthy envelope?** 75 °C in the gearbox is perfectly
+   measurable and still means the machine is running hot. Warning and alarm limits answer
+   that, and they are what feeds the health score.
+
+Rules are data, not code: 10 channels in `configs/health_model.yaml`, each carrying its
+`source` (`industry_standard` — ISO 10816-21 / ISO 20816-1 vibration bands;
+`expert_judgement` — typical O&M alarm practice for a 2 MW geared machine; `data_analysis` —
+derived from the healthy population) and a written `rationale`. `GET
+/health-monitoring/sensor-rules` publishes all of it, because a limit an engineer cannot
+review is a limit they cannot trust.
+
+Two failure modes that pure range checks miss are covered explicitly:
+
+- **Frozen signals.** A sensor stuck at a plausible value passes every range check forever.
+  A channel that moves less than its tolerance across 6 hours is flagged.
+- **Impossible slew.** A reading that jumps faster than the physics allows is a spike or a
+  dropout, not a real transient.
+
+Envelope exceedances deliberately do **not** count against data quality — a hot gearbox is a
+real measurement of an unhealthy machine. Measured validity across the prepared dataset:
+**96.0%** of observations passed every check.
+
+### Features — 239 in 8 groups
+
+| Group | n | What it captures |
+|---|---|---|
+| `condition` | 15 | Current values of the condition channels, plus the one-hot regime |
+| `rolling` | 81 | Trailing mean/std/max over 6/24/72 h |
+| `trend` | 36 | Trailing OLS slopes, differences, deviation from a week-long baseline — the "getting worse" signal |
+| `signal_shape` | 21 | RMS, crest factor, kurtosis, skewness, peak-to-peak, high-frequency ratio, zero-crossing rate |
+| `regime_relative` | 12 | Deviation and robust z-score against the turbine's own past behaviour *within producing regimes* |
+| `rule` | 36 | Normalised distance into the operating envelope, and recent violation rates |
+| `drift` | 25 | The CUSUM / EWMA statistics and trailing signal counts |
+| `physical` | 13 | Temperature rises above ambient, power-curve ratio, vibration per unit load, lubrication interaction |
+
+The `signal_shape` group is the classic set of vibration condition indicators. Computed on a
+trailing window they capture spectral character **without an FFT** and stay leakage-safe;
+kurtosis is excess kurtosis, so 0 is Gaussian and positive is the impulsive signature an
+incipient bearing or gear-tooth defect produces. They are built from rolling raw moments
+rather than `rolling().apply(scipy.stats.kurtosis)`, which is a Python callback per window
+and roughly two orders of magnitude slower on a fleet-sized frame.
+
+`regime_relative` is what stops a turbine on a windy site being scored unhealthy simply for
+running hotter than the fleet: it is judged against **its own** past behaviour, restricted
+to rows where it was actually producing.
+
+Leakage is asserted empirically, not by inspection: `tests/test_health_features.py`
+perturbs the final row and requires that no earlier row's features move, and separately
+requires that changing one turbine's history cannot move another's.
+
+### Health score and classification
+
+The score is a **regression** onto condition, not a classification of an event:
+`health_score_target = 100 × (1 − degradation)`. Four candidates are compared (mean
+baseline, Ridge, random forest, histogram gradient boosting) and selection is guard-railed:
+
+- ranked on **`mae_degraded`** — error restricted to observations below the Monitor
+  boundary — because 88% of observations are healthy and overall MAE is dominated by that
+  easy majority;
+- a candidate whose rank correlation with true condition is below 0.50 is **rejected
+  outright**: a score that does not order turbines correctly cannot prioritise maintenance,
+  whatever its MAE;
+- a candidate not clearly better than predicting the mean is rejected as not worth
+  deploying.
+
+On this dataset **Ridge** was selected. Histogram gradient boosting had a much better
+overall MAE (2.07 versus 4.21) and was still not chosen, because its error *on degraded
+observations* was worse (8.00 versus 6.23) — which is exactly the trade-off the primary
+metric exists to surface. The full rationale is persisted in the artifact.
+
+| Class | Score | Operational meaning |
+|---|---|---|
+| `healthy` | ≥ 80 | No action beyond routine monitoring |
+| `monitor` | 60–80 | Watch the trend; review at the next planned visit |
+| `degraded` | 40–60 | Schedule an inspection; the machine is off-baseline |
+| `critical` | < 40 | Prioritise inspection before continued operation |
+
+The boundaries are an **operational** choice, not a property of the model, so they are
+configuration and can be re-tuned without retraining. Optional adaptive bands shift with
+the fleet's own distribution — off by default, because a moving boundary is harder to
+explain to an operator than a fixed one, and clamped so the bands can never invert.
+
+### Component roll-up — naming where to send an engineer
+
+A single number says something is wrong; it does not say where. Each of gearbox,
+drivetrain, generator, lubrication, hydraulic and brake gets its own score, built from the
+rule margins and own-baseline deviations of **its own** sensors, worst first.
+
+This is deliberately **rule- and baseline-driven rather than model-driven**, for two
+reasons. It is auditable: every deduction traces to either "this channel is inside its
+alarm band" or "this channel has moved N sigma from this turbine's own baseline", both of
+which an engineer can check against the raw trend the dashboard plots next to it. And it
+degrades honestly: a regression trained on a fleet-level target cannot be decomposed into
+per-component contributions without inventing an attribution the training objective never
+constrained.
+
+The two pieces of evidence are combined by taking the **worst, not the average** — a
+component with one channel deep into its alarm band is not healthy because its other
+channels are fine. A component score can therefore legitimately disagree with the overall
+score, and the advisory text says so explicitly rather than hiding it.
+
+### Sensor drift detection — and why the textbook constants had to go
+
+Drift asks a third question: *has this **channel** moved away from what this turbine's own
+history says it should read, and stayed there?* A drifting sensor can sit inside every limit
+while quietly making the health score wrong, so it gets its own detectors and its own capped
+penalty. Three run on each configured channel — CUSUM (small persistent shifts), EWMA
+(faster on moderate steps), and an Isolation Forest over all channels at once (drift that
+shows up only as a broken *relationship* between channels).
+
+**This is the part of the module that needed the most care, and it is worth reading before
+building a detector of your own.** The textbook CUSUM constants (`k=0.5`, `h=5`) and the
+asymptotic EWMA limit are derived for **statistically independent** residuals. Hourly SCADA
+channels are strongly autocorrelated — this hour's gearbox temperature is largely last
+hour's — so those constants have no defined false-alarm rate on this data. Measured here:
+
+| | Before | After |
+|---|---|---|
+| Peak CUSUM statistic | ~1,900 σ (unbounded) | bounded by `h` + one residual |
+| Observations at the maximum drift penalty | **92%** | 2.1% |
+| Observations with no penalty | 3.8% | 68.5% |
+| Drift flag rate, healthy vs degraded | 24% vs 17% *(backwards)* | 28% vs 66% *(2.37×)* |
+
+Three changes fixed it:
+
+1. **Page's restart.** An arm that reaches its decision limit is reported and reset to zero.
+   Without this the statistic is monotonically unbounded under any sustained residual, every
+   row past the first crossing reports an alarm forever, and the "penalty" becomes a
+   constant −15 on every score. With it, the statistic stays bounded and a crossing means
+   "drift detected *here*", so **persistence becomes countable**.
+2. **Severity from persistence, not magnitude.** Because the statistic is now bounded, how
+   far past the limit it went no longer separates a transient excursion from a sustained
+   drift. The trailing count of crossings does.
+3. **Empirical calibration.** Every threshold — CUSUM crossing counts, EWMA magnitudes and
+   the Isolation Forest score — is set from the **fleet's own healthy population** on the
+   **training split only**, so "drift" means *"this channel is crossing its limit more often
+   than a healthy machine on this fleet does"*, with a chosen and recorded false-alarm rate
+   (5% warning, 1% alarm per detector per channel). The fitted thresholds are published in
+   the artifact and on `GET /health-monitoring/model-info`.
+
+How far the calibrated limits land from the textbook ones is the measure of the problem: the
+EWMA limits came out at 1.67–9.60 against a theoretical 0.688, and the Isolation Forest
+threshold at 0.915 against a configured 0.62.
+
+The penalty is **capped at 15 points** so drift alone can never manufacture a Critical
+classification: drift says the *measurement* or the baseline is suspect, which justifies
+lowering confidence in the score, not asserting that the machine has failed. Both the
+published and the raw score are always reported so the deduction is auditable, and the
+contract enforces `health_score == max(raw_health_score − drift_penalty, 0)`.
+
+**An honest limitation:** this dataset contains no injected calibration drift, so the
+detector has nothing genuine to find here. Its thresholds are calibrated only to control the
+false-alarm rate on healthy machines; its ability to catch a real drifting instrument is
+**untested**. It is presented as a working, calibrated mechanism, not as a validated
+instrument-fault detector.
+
+### Reproducing it
+
+```bash
+make health-pipeline      # prepare + train, ~1 min once the raw data exists
+```
+
+The health pipeline deliberately **does not** regenerate the raw dataset. Both modules read
+the same file, which is what makes their outputs comparable; `make pipeline-all` runs both
+in order against one dataset.
+
+---
+
+## 22. API
 
 FastAPI with Pydantic validation and Swagger docs at `/docs`. **The API never trains a
 model** — artifacts are loaded lazily, so it starts cleanly even with none present and
@@ -582,7 +853,7 @@ reports `degraded` on `/health`.
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/` | Platform overview, mounted modules, roadmap |
-| `GET` | `/health` | API status, model artifact status, version, timestamp |
+| `GET` | `/health` | API status and **per-module** artifact status, version, timestamp |
 | `GET` | `/failure/model-info` | Full model metadata and selection rationale |
 | `GET` | `/failure/metrics` | Evaluation metrics (flagged synthetic) |
 | `GET` | `/failure/features` | Feature contract — names in exact model order |
@@ -590,6 +861,36 @@ reports `degraded` on `/health`.
 | `POST` | `/failure/predict` | **Preferred** — raw observation window |
 | `POST` | `/failure/predict/batch` | Batch of windows (≤200 turbines) |
 | `POST` | `/failure/predict/prepared` | Fallback — precomputed feature vector |
+| `GET` | `/health-monitoring/model-info` | Health model metadata, class bands, drift calibration |
+| `GET` | `/health-monitoring/metrics` | Health metrics (flagged synthetic) |
+| `GET` | `/health-monitoring/sensor-rules` | Envelope rules with the provenance of every limit |
+| `GET` | `/health-monitoring/example` | Ready-to-post example body |
+| `POST` | `/health-monitoring/assess` | Assess one turbine from a raw observation window |
+| `POST` | `/health-monitoring/assess/batch` | Batch of windows (≤200 turbines) |
+
+The health prefix is `/health-monitoring`, **not** `/health`: that path is the platform
+liveness probe used by the Docker health check and by CI, so a module must not take it.
+
+`GET /health` reports each module separately and returns `200` regardless:
+
+```json
+{
+  "status": "ok",
+  "modules": {
+    "failure_prediction":        {"model_loaded": true,  "n_features": 395, "...": "..."},
+    "turbine_health_monitoring": {"model_loaded": true,  "n_features": 239, "...": "..."}
+  }
+}
+```
+
+The modules are independent: one having no artifacts does not stop the other from serving,
+and a CI step asserts exactly that. `status` is `ok` only when every mounted module is
+loaded, so `degraded` always means "look at `modules` to see which".
+
+There is deliberately **no** `/health-monitoring/assess/prepared`. Unlike a failure
+probability, an assessment reports component scores and rule violations computed from *raw*
+readings, so a caller posting only a feature vector could not be given a complete
+assessment — and returning a silently partial one would be worse than not offering the mode.
 
 ### Two input modes, both fully implemented
 
@@ -635,10 +936,12 @@ reports `degraded` on `/health`.
 
 ---
 
-## 22. Dashboard
+## 23. Dashboard
 
-Streamlit, at `http://localhost:8501`. Navigation lists the built module and the planned
-ones, clearly marked.
+Streamlit, at `http://localhost:8501`. Navigation lists the two built modules and the
+planned one, clearly marked.
+
+### Failure Prediction page
 
 - **Executive summary** — turbines evaluated, high-risk count, mean probability,
   highest-risk turbine, model version, risk distribution. An **as-of slider** rescopes the
@@ -654,39 +957,74 @@ ones, clearly marked.
   explanation, power curve.
 - **Limitations** — synthetic status, advisory-only, validation requirement.
 
+### Turbine Health Monitoring page
+
+Organised the way an operator reads a fleet — who needs attention, why, is it real, how
+well does the model do, and what it cannot do:
+
+- **Fleet snapshot** — turbines assessed, mean and lowest health score, how many are outside
+  the Healthy band, how many carry a drift deduction; class composition and score
+  distribution. The same **as-of slider** rescopes the whole page.
+- **Fleet detail** — per-turbine table with a health-score progress bar, class, regime, and
+  the drift deduction shown separately from the model's own estimate.
+- **Turbine detail** — score timeline with the class bands shaded and the actual condition
+  overlaid, the component roll-up, the grounded narrative and advisory, the largest
+  condition deviations, and the sensor rules that fired.
+- **Sensor evidence** — the raw channel plotted against the exact warning and alarm limits
+  that produced the deductions, each with its provenance and rationale printed underneath.
+  This is what makes a component score checkable rather than merely reported.
+- **Sensor drift** — the calibrated thresholds and the healthy-population rate they were set
+  from, plus the CUSUM/EWMA statistics over time. The sawtooth pattern is expected: each
+  tooth is one detection, because the arms reset when they signal.
+- **Operating regimes** — how much time the fleet spends in each, and the measured sensor
+  validity across the dataset.
+- **Model performance** — the regression metrics, error by true band, and the four figures.
+- **Limitations** — stated on the page, not buried in a document.
+
+The fleet table and the detail panel are both derived from the **same** feature matrix, so
+they cannot report different scores for the same turbine at the same timestamp. That is why
+the service exposes `assess_from_prepared` alongside the window-based path, and a test pins
+the agreement.
+
 **The dashboard does not crash on missing artifacts.** Every section degrades to a
-message plus the exact command needed. Prediction logic is not duplicated — it calls the
-same `FailurePredictionService` as the API.
+message plus the exact command needed. Neither page duplicates logic — they call the same
+`FailurePredictionService` and `HealthMonitoringService` the API uses.
 
 ---
 
-## 23. Project structure
+## 24. Project structure
 
 ```
 wind-turbine-predictive-maintenance/
-├── configs/                       # base · data · features · failure_model (YAML)
+├── configs/                       # base · data · features · failure_model · health_model (YAML)
 ├── data/{raw,interim,processed,samples}/
 ├── artifacts/{models,metrics,figures,metadata}/
 ├── notebooks/01_failure_prediction_eda.ipynb
 ├── scripts/                       # generate · prepare · train · evaluate · run_pipeline
+│                                  # prepare_health_data · train_health_model · run_health_pipeline
 ├── src/wind_turbine_pm/
 │   ├── config.py  constants.py  logging_config.py
-│   ├── contracts/                 # observations · predictions · metadata  ← SHARED
+│   ├── contracts/                 # observations · predictions · metadata · health  ← SHARED
 │   ├── data/                      # synthetic · ingestion · validation · preprocessing · splitting
 │   ├── features/                  # failure_features · transformers
 │   ├── models/                    # baselines · training · evaluation · threshold · persistence · prediction
 │   ├── explainability/            # shap_explainer · narratives
-│   ├── services/                  # failure_prediction_service  ← SHARED BY API + DASHBOARD
-│   ├── api/                       # main · dependencies · schemas · routers/failure
+│   ├── health/                    # sensor_rules · regimes · health_features · drift
+│   │                              # health_score · health_class · components
+│   │                              # narratives · evaluation · persistence · config
+│   ├── services/                  # failure_prediction_service · health_monitoring_service
+│   │                              #   ← SHARED BY API + DASHBOARD
+│   ├── api/                       # main · dependencies · schemas
+│   │                              # routers/{failure,health_monitoring}
 │   └── utils/                     # io · paths · reproducibility
-├── dashboard/{app.py,pages/,components/,data_access.py}
-├── tests/                         # 162 tests
-└── docs/OZAN_HANDOFF.md
+├── dashboard/{app.py,pages/{failure_prediction,fleet_health},components/,data_access.py}
+├── tests/                         # 390 tests
+└── docs/{OZAN_HANDOFF.md,MODEL_CARD_HEALTH.md}
 ```
 
 ---
 
-## 24. Local installation
+## 25. Local installation
 
 Requires **Python 3.12+**.
 
@@ -750,6 +1088,10 @@ make dashboard                   # streamlit run dashboard/app.py
 | `make train` | `python scripts/train_failure_model.py` |
 | `make evaluate` | `python scripts/evaluate_failure_model.py` |
 | `make pipeline` | `python scripts/run_failure_pipeline.py` |
+| `make prepare-health` | `python scripts/prepare_health_data.py` |
+| `make train-health` | `python scripts/train_health_model.py` |
+| `make health-pipeline` | `python scripts/run_health_pipeline.py` |
+| `make pipeline-all` | both module pipelines, in order, on one shared dataset |
 | `make test` | `pytest` |
 | `make lint` | `ruff check .` |
 | `make format` | `ruff format . && ruff check --fix .` |
@@ -763,19 +1105,28 @@ make dashboard                   # streamlit run dashboard/app.py
 ### Testing
 
 ```bash
-make test                        # 162 tests, ~14 s
+make test                        # 390 tests, ~90 s
 ```
 
-Covering: synthetic data determinism and physics · validation findings · target
-correctness and edge cases · feature leakage (turbine and temporal) · split ordering and
-embargo · training, selection and tie-breaks · threshold bounds and risk mapping ·
-service behaviour with and without artifacts · every API endpoint and error path.
+Covering, for both modules: synthetic data determinism and physics · validation findings ·
+target correctness and edge cases · feature leakage (turbine and temporal, asserted
+empirically) · split ordering and embargo · training, selection and tie-breaks · threshold
+bounds and risk mapping · sensor-rule consistency and provenance · operating-regime
+precedence · CUSUM boundedness and threshold calibration · class-band boundaries · narrative
+groundedness · service behaviour with and without artifacts · every API endpoint and error
+path.
 
-Tests build their own small fixtures and never train a production-scale model.
+Several are explicit **regression tests for defects found while building the health
+module** — notably that the drift penalty must not saturate, that the CUSUM statistic must
+stay bounded, and that the bulk and single scoring paths must agree on the same row.
+
+Tests build their own small fixtures and never train a production-scale model. The ~21
+artifact-dependent tests skip when no model has been trained; CI trains both modules and
+then re-runs them, failing if any still skip.
 
 ---
 
-## 25. Docker usage
+## 26. Docker usage
 
 ```bash
 docker compose up --build
@@ -829,7 +1180,7 @@ ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugin
 
 ---
 
-## 26. Limitations
+## 27. Limitations
 
 **Read this before drawing any conclusion from the numbers above.**
 
@@ -856,40 +1207,80 @@ ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugin
 - **Calibration is fitted on the validation split**, and the threshold is optimised on
   the same split. This makes validation threshold metrics mildly optimistic. Test metrics
   are unaffected.
-- **No drift monitoring.** Performance will degrade as turbines age and sensors drift.
-  That is a future module's responsibility.
 - **Single site, single year.** No seasonal generalisation can be claimed.
+
+### Turbine Health Monitoring, additionally
+
+- **The health target comes from the simulator's `degradation_level`.** That is a legitimate
+  label and an illegitimate feature, so it is excluded from the matrix and the exclusion is
+  asserted by a test. On a real fleet the label must come from a source **independent of the
+  SCADA channels the features are built from** — inspection reports, oil analysis, borescope
+  findings, or a certified condition-monitoring index. Deriving it from the same signals
+  that produce the features would make the model learn its own input and report a flattering
+  error that means nothing. `build_health_target` raises with that instruction rather than
+  inventing a target.
+- **The drift detector is not validated against real calibration drift.** This dataset
+  contains none. Its thresholds are calibrated only to control the false-alarm rate on the
+  healthy population; its ability to catch a genuinely drifting instrument is **untested**.
+- **Drift is deliberately not a condition signal.** It reports that a *measurement* has
+  moved away from its own baseline, which is a different question from whether the machine is
+  degrading. Treat it as a confidence input, not as severity.
+- **Rank correlation is moderate (Spearman 0.60 on test).** The score orders turbines
+  correctly more often than not, but not reliably enough to drive a strict work-order
+  priority queue on its own.
+- **Error is worst on healthy machines (MAE 6.53 versus 5.08 on Monitor).** The model is
+  slightly pessimistic about sound turbines. Class agreement on the healthy band is
+  nonetheless 0.988, so the *decision* is rarely wrong even where the number is.
+- **Class boundaries and envelope limits are configuration**, chosen for a synthetic 2 MW
+  fleet from industry practice and standards. They must be re-derived against the operator's
+  own turbine type, control strategy, alarm history and real inspection outcomes.
+- **Component scores are rule- and baseline-driven, not model-derived.** That makes them
+  auditable but means they will not always agree with the overall score, which is
+  fleet-trained. A disagreement is information, and the advisory text surfaces it rather
+  than hiding it.
+- **Ridge is a linear model on 239 features** and reported an ill-conditioned design matrix
+  during the fit. The L2 penalty handles it, but the coefficients should not be read as
+  independent effect sizes.
 
 ---
 
-## 27. Future modules
-
-**None of the following exist.** They are the planned next stages of this collaborative
-project. This module provides contracts and extension points for them and must not need
-restructuring when they arrive.
+## 28. Future modules
 
 | Stage | Module | Scope | Status |
 |---|---|---|---|
 | 1 | **Failure Prediction** | 48-hour failure risk, explanation, advisory output | ✅ **Complete** |
-| 2 | Turbine Health Monitoring | Fleet health scoring, component condition indices, sensor drift monitoring | ⏳ Planned |
+| 2 | **Turbine Health Monitoring** | Condition scoring, health classification, component roll-up, operating regimes, sensor drift detection | ✅ **Complete** |
 | 3 | Anomaly Detection & Decision Support | Unsupervised anomaly detection, unified risk score, maintenance prioritisation | ⏳ Planned |
+
+Stage 3 does not exist yet. Stages 1 and 2 provide contracts and extension points for it
+and should not need restructuring when it arrives.
 
 **Extension points already in place:**
 
 - `contracts/observations.py` — shared `TurbineObservation` / `TurbineWindow` schema
 - `contracts/predictions.py` — `BasePrediction` for any per-turbine model output
 - `contracts/metadata.py` — `ModelMetadata` for any published model
-- `api/main.py` — `MODULE_ROUTERS` list; add a router without touching failure code
+- `contracts/health.py` — health output schemas, consumable by a unified score
+- `api/main.py` — `MODULE_ROUTERS` list; add a router without touching either module
 - `dashboard/app.py` — `PAGES` list; add a page with one entry
 - `features/transformers.py` — reusable leakage-safe temporal primitives
+- `health/regimes.py` — regime conditioning, which anomaly detection needs too: an anomaly
+  at idle is not the same as one at rated power
+- `health/drift.py` — `DriftCalibration`, the pattern for setting a detector's limits from a
+  healthy reference period instead of a textbook constant. **Read its docstring before
+  choosing control limits for a new detector on this data**
 - `data/validation.py` — reusable validation layer
-- Shared config structure and artifact directories
+- Shared config structure and artifact directories, with per-module namespacing
+
+**Stage 2 is the worked example.** `docs/OZAN_HANDOFF.md` §12 documents its contract,
+including how to combine a health assessment with a failure probability without collapsing
+two genuinely different questions into one number.
 
 See [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) for the full contract documentation.
 
 ---
 
-## 28. Ethical and operational considerations
+## 29. Ethical and operational considerations
 
 - **Human oversight is required.** Every output is advisory and carries a disclaimer
   naming the need for review by a qualified maintenance engineer.
@@ -912,7 +1303,7 @@ See [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) for the full contract documen
 
 ---
 
-## 29. License
+## 30. License
 
 [MIT](LICENSE).
 
@@ -925,6 +1316,7 @@ Provided as-is, without warranty. Not certified for safety-critical industrial u
 | Document | Contents |
 |---|---|
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, branching, definition of done, platform non-negotiables |
-| [`MODEL_CARD.md`](MODEL_CARD.md) | Intended use, out-of-scope use, metrics, risks, oversight, retraining |
-| [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) | Data, feature, artifact and API contracts; extension points; stable files |
+| [`MODEL_CARD.md`](MODEL_CARD.md) | Failure Prediction: intended use, out-of-scope use, metrics, risks, oversight, retraining |
+| [`docs/MODEL_CARD_HEALTH.md`](docs/MODEL_CARD_HEALTH.md) | Turbine Health Monitoring: the same, plus the drift-calibration analysis |
+| [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) | Data, feature, artifact and API contracts; extension points; stable files. §12 is the health contract for Stage 3 |
 | [`notebooks/01_failure_prediction_eda.ipynb`](notebooks/01_failure_prediction_eda.ipynb) | Exploratory analysis and the leakage discussion |

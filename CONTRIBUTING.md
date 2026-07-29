@@ -1,17 +1,19 @@
 # Contributing
 
-This is a three-stage collaborative project. Stage 1 (Failure Prediction) is complete;
-Stages 2 and 3 build on top of it.
+This is a three-stage collaborative project. Stages 1 and 2 are complete; Stage 3 builds
+on top of them.
 
 | Stage | Module | Branch | Status |
 |---|---|---|---|
 | 1 | Failure Prediction | `feature/ozan-failure-prediction` | ✅ Complete |
-| 2 | Turbine Health Monitoring | `feature/<name>-health-monitoring` | ⏳ Planned |
+| 2 | Turbine Health Monitoring | `feature/ozan-failure-prediction` | ✅ Complete |
 | 3 | Anomaly Detection & Decision Support | `feature/<name>-anomaly-detection` | ⏳ Planned |
 
 **Before writing any code, read [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md).** It
 documents the data, feature, artifact and API contracts your module must respect, the
 extension points to build on, and the files that must not change without coordination.
+§12 is the Turbine Health Monitoring contract, including how to combine a health
+assessment with a failure probability without collapsing the two into one number.
 
 ---
 
@@ -22,9 +24,14 @@ Requires **Python 3.12+**.
 ```bash
 python -m venv .venv && source .venv/bin/activate
 make install
-make pipeline          # ~2.5 min: generates data, trains and evaluates
+make pipeline-all      # ~4 min: generates data, then trains both modules on it
 make test
 ```
+
+`make pipeline-all` runs the failure and health pipelines in order against **one** shared
+raw dataset. The health pipeline deliberately does not regenerate the data, so both
+modules always describe the same fleet. Run them separately with `make pipeline` and
+`make health-pipeline` if you only need one.
 
 If `import wind_turbine_pm` fails after the editable install (happens on some sandboxed
 macOS shells), use `export PYTHONPATH=src`.
@@ -47,14 +54,19 @@ A module is not finished until all of these hold:
 
 - [ ] `make lint` and `make test` pass
 - [ ] New temporal features have a **leakage test** (see
-      `tests/test_failure_features.py::test_no_future_leakage`)
+      `tests/test_failure_features.py::test_no_future_leakage` and
+      `tests/test_health_features.py::test_no_feature_reads_the_future`)
 - [ ] Nothing in [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) §9 ("files you should not
       change unnecessarily") was modified without agreement
 - [ ] Model outputs subclass `BasePrediction` and keep `advisory_only: true`
-- [ ] Artifacts are prefixed with your module name and written via
-      `models/persistence.py` accessors, not literal paths
+- [ ] Configuration lives under a single top-level namespace for your module, so a
+      deep-merge cannot overwrite another module's keys (see `configs/health_model.yaml`)
+- [ ] Artifacts are prefixed with your module name and written via a persistence-module
+      path accessor, not literal paths
 - [ ] Missing artifacts degrade gracefully — a message and the command to fix, never a
       traceback
+- [ ] Any detector with a decision threshold states where the threshold came from, and
+      **its alert rate on healthy data is measured, not assumed** (see non-negotiable 7)
 - [ ] Metrics in documentation come from executed code, never from memory or estimation
 - [ ] Your module is documented and added to the roadmap tables
 
@@ -84,6 +96,19 @@ not a configurable field.
 
 **6. No invented numbers.** Every metric in a README, model card or comment must come
 from a file in `artifacts/`. If you have not run it, do not write it.
+
+**7. A detector's alert rate must be measured on healthy data.** Textbook control-chart
+constants (CUSUM `h=5`, `k=0.5`; EWMA `L=3`) are derived for *independent* residuals.
+Hourly SCADA channels are strongly autocorrelated, so those constants produce far more
+alerts than their nominal rate. Measured here before it was fixed: 92% of all
+observations took the maximum drift penalty, which is a constant offset on every score
+rather than a signal. Set your limits from a healthy reference period and record the
+achieved rate — see `health/drift.py::DriftCalibration`.
+
+**8. Two scores that describe the same turbine must not disagree.** If a page shows a
+fleet table and a detail panel, both must be derived from the same feature matrix. Where
+two entry points can legitimately differ (a short serving window versus full history), say
+so in the docstring rather than leaving a reader to discover it.
 
 ---
 
@@ -115,7 +140,7 @@ documents the schema.
 Regenerate everything with:
 
 ```bash
-make pipeline
+make pipeline-all
 ```
 
 ---
