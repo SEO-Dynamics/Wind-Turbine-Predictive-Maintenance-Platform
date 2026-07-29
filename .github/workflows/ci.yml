@@ -101,6 +101,21 @@ jobs:
           test -f artifacts/metrics/failure_metrics.json
           echo "Pipeline smoke test passed"
 
+      - name: Re-run the artifact-dependent tests
+        # 21 tests skip in the run above because no model exists yet - and they
+        # are the ones that matter most: real predictions, batch scoring,
+        # explanation schema, risk-band mapping and runtime/artifact version
+        # compatibility. Now that the smoke test has produced artifacts, run
+        # them for real so CI actually validates a trained model end to end.
+        if: matrix.python-version == '3.13'
+        run: |
+          pytest -q tests/test_prediction_service.py tests/test_failure_api.py -p no:randomly \
+            | tee pytest-artifacts.log
+          if grep -qE "[0-9]+ skipped" pytest-artifacts.log; then
+            echo "::error::Artifact-dependent tests still skipped - artifacts were not picked up"
+            exit 1
+          fi
+
       - name: Upload artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
