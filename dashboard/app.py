@@ -24,7 +24,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from dashboard.pages import failure_prediction  # noqa: E402
+from dashboard.pages import failure_prediction, fleet_health  # noqa: E402
 from wind_turbine_pm import __version__  # noqa: E402
 from wind_turbine_pm.constants import ADVISORY_DISCLAIMER  # noqa: E402
 
@@ -56,15 +56,7 @@ def _coming_soon(module: str, description: str) -> Callable[[], None]:
 #: Dashboard navigation. Future modules append entries here.
 PAGES: list[Page] = [
     Page("Failure Prediction", failure_prediction.render, available=True),
-    Page(
-        "Turbine Health Monitoring",
-        _coming_soon(
-            "Turbine Health Monitoring",
-            "- Fleet-level health scoring\n- Component condition indices\n- Sensor drift monitoring",
-        ),
-        available=False,
-        note="Planned - Stage 2",
-    ),
+    Page("Turbine Health Monitoring", fleet_health.render, available=True),
     Page(
         "Anomaly Detection",
         _coming_soon(

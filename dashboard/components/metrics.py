@@ -16,6 +16,14 @@ from wind_turbine_pm.constants import ADVISORY_DISCLAIMER
 #: Colour per risk level, used consistently across pages.
 RISK_COLOURS: dict[str, str] = {"low": "#2f855a", "medium": "#b7791f", "high": "#c53030"}
 
+#: Colour per health class, used consistently across pages and figures.
+HEALTH_COLOURS: dict[str, str] = {
+    "healthy": "#2f855a",
+    "monitor": "#b7791f",
+    "degraded": "#c05621",
+    "critical": "#c53030",
+}
+
 
 def missing_artifact_notice(what: str, command: str, detail: str = "") -> None:
     """Render an actionable notice for a missing artifact.
@@ -61,6 +69,23 @@ def risk_badge(level: str) -> str:
     return (
         f"<span style='background:{colour};color:white;padding:2px 10px;"
         f"border-radius:10px;font-size:0.85em;font-weight:600'>{level.upper()}</span>"
+    )
+
+
+def health_badge(health_class: str) -> str:
+    """Return a coloured HTML badge for a health class.
+
+    Args:
+        health_class: ``"healthy"``, ``"monitor"``, ``"degraded"`` or
+            ``"critical"``.
+
+    Returns:
+        An inline HTML span.
+    """
+    colour = HEALTH_COLOURS.get(health_class.lower(), "#4a5568")
+    return (
+        f"<span style='background:{colour};color:white;padding:2px 10px;"
+        f"border-radius:10px;font-size:0.85em;font-weight:600'>{health_class.upper()}</span>"
     )
 
 

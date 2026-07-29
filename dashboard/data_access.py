@@ -17,14 +17,23 @@ import streamlit as st
 
 from wind_turbine_pm.config import Config, load_config
 from wind_turbine_pm.data.preprocessing import preprocess
+from wind_turbine_pm.health.config import load_health_config
+from wind_turbine_pm.health.persistence import (
+    health_dataset_path,
+    health_features_path,
+    try_load_health_metrics,
+)
 from wind_turbine_pm.models.persistence import figures_dir, try_load_metrics
 from wind_turbine_pm.services.failure_prediction_service import FailurePredictionService
+from wind_turbine_pm.services.health_monitoring_service import HealthMonitoringService
 from wind_turbine_pm.utils.io import ArtifactNotFoundError, read_table
 from wind_turbine_pm.utils.paths import resolve
 
 PIPELINE_COMMAND = "python scripts/run_failure_pipeline.py"
 PREPARE_COMMAND = "python scripts/prepare_data.py"
 EVALUATE_COMMAND = "python scripts/evaluate_failure_model.py"
+HEALTH_PIPELINE_COMMAND = "python scripts/run_health_pipeline.py"
+HEALTH_PREPARE_COMMAND = "python scripts/prepare_health_data.py"
 
 
 @st.cache_resource(show_spinner=False)
@@ -134,6 +143,123 @@ def figure_path(name: str) -> Path | None:
     """
     path = figures_dir(get_config_cached()) / name
     return path if path.is_file() else None
+
+
+# ---------------------------------------------------------------------------
+# Turbine Health Monitoring
+# ---------------------------------------------------------------------------
+@st.cache_resource(show_spinner=False)
+def get_health_config_cached() -> Config:
+    """Load and cache the configuration including the ``health`` namespace.
+
+    Kept separate from :func:`get_config_cached` because the health module needs
+    ``health_model.yaml`` merged in, and the Failure Prediction page must keep
+    seeing exactly the configuration it was trained with.
+
+    Returns:
+        The merged configuration.
+    """
+    return load_health_config()
+
+
+@st.cache_resource(show_spinner="Loading health model artifacts...")
+def get_health_service_cached() -> HealthMonitoringService:
+    """Build and cache the health monitoring service.
+
+    Returns:
+        The service (which may not be ready; check ``is_ready``).
+    """
+    return HealthMonitoringService(get_health_config_cached())
+
+
+@st.cache_data(show_spinner="Loading health dataset...")
+def load_health_dataset() -> pd.DataFrame | None:
+    """Load the prepared health dataset.
+
+    Returns:
+        The dataset, or ``None`` when health preparation has not been run.
+    """
+    try:
+        return read_table(
+            health_dataset_path(get_health_config_cached()), hint=HEALTH_PREPARE_COMMAND
+        )
+    except ArtifactNotFoundError:
+        return None
+
+
+@st.cache_data(show_spinner="Loading health features...")
+def load_health_features() -> pd.DataFrame | None:
+    """Load the prepared health feature matrix.
+
+    Returns:
+        The feature matrix, or ``None`` when health preparation has not been run.
+    """
+    try:
+        return read_table(
+            health_features_path(get_health_config_cached()), hint=HEALTH_PREPARE_COMMAND
+        )
+    except ArtifactNotFoundError:
+        return None
+
+
+@st.cache_data(show_spinner=False)
+def load_health_metrics() -> dict[str, Any] | None:
+    """Load the health metrics document.
+
+    Returns:
+        The metrics document, or ``None`` when it has not been written.
+    """
+    return try_load_health_metrics(get_health_config_cached())
+
+
+@st.cache_data(show_spinner="Scoring fleet health...")
+def score_health(split: str = "test") -> pd.DataFrame | None:
+    """Score one prepared split with the published health model.
+
+    Args:
+        split: Split name to score.
+
+    Returns:
+        A frame of health scores joined with the ground-truth columns, or
+        ``None`` when the required artifacts are missing.
+    """
+    dataset, features = load_health_dataset(), load_health_features()
+    service = get_health_service_cached()
+    if dataset is None or features is None or not service.is_ready:
+        return None
+
+    subset = dataset.loc[dataset["split"] == split]
+    if subset.empty:
+        return None
+
+    scored = service.score_frame(subset, features.loc[subset.index])
+    carried = [
+        column
+        for column in ("health_score_target", "health_class", "degradation_level", "failure_mode")
+        if column in subset.columns
+    ]
+    # The scored frame carries its own health_class (the prediction); the
+    # ground-truth column of the same name is renamed so both survive the join
+    # and a chart can compare them.
+    truth = subset[carried].rename(columns={"health_class": "true_health_class"})
+    return scored.join(truth).reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False)
+def load_health_data_quality() -> dict[str, Any] | None:
+    """Load the health data-quality summary written by preparation.
+
+    Returns:
+        The document, or ``None`` when preparation has not been run.
+    """
+    cfg = get_health_config_cached()
+    path = resolve(str(cfg.require("paths.artifacts_metrics"))) / "health_data_quality.json"
+    if not path.is_file():
+        return None
+    import json
+
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 @st.cache_data(show_spinner="Scoring the fleet...")
