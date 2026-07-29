@@ -21,5 +21,26 @@
 /src/wind_turbine_pm/api/routers/failure.py  @onurozansunger
 /dashboard/pages/failure_prediction.py       @onurozansunger
 
-# Handoff contract.
-/docs/OZAN_HANDOFF.md               @onurozansunger
+# ---------------------------------------------------------------------------
+# Turbine Health Monitoring Module internals (Stage 2).
+#
+# Listed after the Stage 1 block because the last matching rule wins: the entry
+# above for /src/wind_turbine_pm/services/ would otherwise also claim the health
+# service.
+# ---------------------------------------------------------------------------
+/src/wind_turbine_pm/health/                            @SBRKBNL
+/src/wind_turbine_pm/services/health_monitoring_service.py  @SBRKBNL
+/src/wind_turbine_pm/api/routers/health_monitoring.py   @SBRKBNL
+/dashboard/pages/fleet_health.py                        @SBRKBNL
+/configs/health_model.yaml                              @SBRKBNL
+/scripts/prepare_health_data.py                         @SBRKBNL
+/scripts/train_health_model.py                          @SBRKBNL
+/scripts/run_health_pipeline.py                         @SBRKBNL
+/docs/MODEL_CARD_HEALTH.md                              @SBRKBNL
+
+# Health output contract - a shared platform contract authored by Stage 2, so
+# both owners review a change to it.
+/src/wind_turbine_pm/contracts/health.py  @onurozansunger @SBRKBNL
+
+# Handoff contract - now covers both modules.
+/docs/OZAN_HANDOFF.md               @onurozansunger @SBRKBNL

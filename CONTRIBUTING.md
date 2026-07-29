@@ -3,11 +3,11 @@
 This is a three-stage collaborative project. Stages 1 and 2 are complete; Stage 3 builds
 on top of them.
 
-| Stage | Module | Branch | Status |
-|---|---|---|---|
-| 1 | Failure Prediction | `feature/ozan-failure-prediction` | ✅ Complete |
-| 2 | Turbine Health Monitoring | `feature/ozan-failure-prediction` | ✅ Complete |
-| 3 | Anomaly Detection & Decision Support | `feature/<name>-anomaly-detection` | ⏳ Planned |
+| Stage | Module | Author | Branch | Status |
+|---|---|---|---|---|
+| 1 | Failure Prediction | [@onurozansunger](https://github.com/onurozansunger) | `feature/ozan-failure-prediction` | ✅ Complete |
+| 2 | Turbine Health Monitoring | [@SBRKBNL](https://github.com/SBRKBNL) | `feature/turbine-health-monitoring` | ✅ Complete |
+| 3 | Anomaly Detection & Decision Support | — | `feature/<name>-anomaly-detection` | ⏳ Planned |
 
 **Before writing any code, read [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md).** It
 documents the data, feature, artifact and API contracts your module must respect, the

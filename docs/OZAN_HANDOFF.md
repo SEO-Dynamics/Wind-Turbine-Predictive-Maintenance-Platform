@@ -1,8 +1,9 @@
 # Handoff — Failure Prediction and Turbine Health Monitoring
 
-**From:** Stage 1 (Failure Prediction) and Stage 2 (Turbine Health Monitoring)
+**From:** Stage 1 — Failure Prediction ([@onurozansunger](https://github.com/onurozansunger))
+and Stage 2 — Turbine Health Monitoring ([@SBRKBNL](https://github.com/SBRKBNL))
 **To:** Stage 3 (Anomaly Detection & Maintenance Decision Support)
-**Branch:** `feature/ozan-failure-prediction`
+**Branches:** `feature/ozan-failure-prediction` · `feature/turbine-health-monitoring`
 **Module versions:** failure prediction 1.0.0 · turbine health monitoring 1.0.0
 **Date:** 2026-07-30
 

@@ -1303,7 +1303,23 @@ See [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) for the full contract documen
 
 ---
 
-## 30. License
+## 30. Contributors
+
+A three-stage collaborative project. Each stage is a self-contained module built on the
+contracts the previous one published.
+
+| Stage | Module | Author |
+|---|---|---|
+| 1 | Failure Prediction | [@onurozansunger](https://github.com/onurozansunger) |
+| 2 | Turbine Health Monitoring | [@SBRKBNL](https://github.com/SBRKBNL) |
+| 3 | Anomaly Detection & Decision Support | *open* |
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to pick up Stage 3, and
+[`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) for the contracts it can build on.
+
+---
+
+## 31. License
 
 [MIT](LICENSE).
 

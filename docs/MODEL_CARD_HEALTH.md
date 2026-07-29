@@ -469,7 +469,8 @@ guaranteed to load under the version that wrote it.
 
 ## 19. Contact and governance
 
-**Module owner:** Turbine Health Monitoring Module (Stage 2).
+**Module owner:** Turbine Health Monitoring Module (Stage 2) —
+[@SBRKBNL](https://github.com/SBRKBNL).
 **Repository:** https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform
 **Handoff documentation:** [`OZAN_HANDOFF.md`](OZAN_HANDOFF.md) — §12 is this module's contract
 
