@@ -1,0 +1,50 @@
+name: Module proposal
+description: Propose or plan a new platform module (Stage 2 / Stage 3).
+labels: ["module", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read [`docs/OZAN_HANDOFF.md`](../blob/main/docs/OZAN_HANDOFF.md) first - it defines
+        the contracts your module must respect and the extension points to build on.
+  - type: input
+    id: module-name
+    attributes:
+      label: Module name
+      placeholder: Turbine Health Monitoring
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What it does, and explicitly what it does not do.
+    validations:
+      required: true
+  - type: textarea
+    id: contracts
+    attributes:
+      label: Contracts consumed
+      description: Which shared contracts will you use, and do you need any changed?
+      placeholder: |
+        Consumes: TurbineWindow, ModelMetadata
+        Produces: HealthPrediction (subclasses BasePrediction)
+        Contract changes needed: none
+    validations:
+      required: true
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Artifacts produced
+      placeholder: artifacts/models/health_model.joblib, artifacts/metrics/health_metrics.json
+  - type: checkboxes
+    id: invariants
+    attributes:
+      label: Platform invariants
+      options:
+        - label: Temporal features will be leakage-safe and grouped by turbine, with tests
+          required: true
+        - label: Validation will be chronological, never a random split
+          required: true
+        - label: Output will be advisory only and will never trigger automated plant action
+          required: true

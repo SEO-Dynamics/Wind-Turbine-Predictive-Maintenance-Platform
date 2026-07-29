@@ -1,0 +1,25 @@
+# Default reviewer for anything not matched below.
+*                                   @onurozansunger
+
+# ---------------------------------------------------------------------------
+# Shared platform contracts and core utilities.
+#
+# These are depended on by every module; changing one is a breaking change for
+# the whole platform. See docs/OZAN_HANDOFF.md §9.
+# ---------------------------------------------------------------------------
+/src/wind_turbine_pm/contracts/     @onurozansunger
+/src/wind_turbine_pm/constants.py   @onurozansunger
+/src/wind_turbine_pm/config.py      @onurozansunger
+/src/wind_turbine_pm/utils/         @onurozansunger
+
+# Failure Prediction Module internals (Stage 1).
+/src/wind_turbine_pm/models/                 @onurozansunger
+/src/wind_turbine_pm/explainability/         @onurozansunger
+/src/wind_turbine_pm/services/               @onurozansunger
+/src/wind_turbine_pm/features/               @onurozansunger
+/src/wind_turbine_pm/data/                   @onurozansunger
+/src/wind_turbine_pm/api/routers/failure.py  @onurozansunger
+/dashboard/pages/failure_prediction.py       @onurozansunger
+
+# Handoff contract.
+/docs/OZAN_HANDOFF.md               @onurozansunger

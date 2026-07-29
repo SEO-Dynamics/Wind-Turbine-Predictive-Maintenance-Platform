@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Module handoff contract
+    url: https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform/blob/main/docs/OZAN_HANDOFF.md
+    about: Data, feature, artifact and API contracts - read before building a new module.
+  - name: Model card
+    url: https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform/blob/main/MODEL_CARD.md
+    about: Intended use, limitations and risks. Read before interpreting any prediction.

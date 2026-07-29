@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in the platform behaves incorrectly.
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: module
+    attributes:
+      label: Module
+      options:
+        - Failure Prediction (Stage 1)
+        - Turbine Health Monitoring (Stage 2)
+        - Anomaly Detection & Decision Support (Stage 3)
+        - Shared contracts / core utilities
+        - API
+        - Dashboard
+        - Pipeline / training
+        - Docker / CI
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Include the actual error or output, not a paraphrase.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. make pipeline
+        2. curl -s localhost:8000/failure/predict -d '...'
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: "Output of: python -V && pip show scikit-learn numpy | grep -E 'Name|Version'"
+      render: shell
+  - type: checkboxes
+    id: artifacts
+    attributes:
+      label: Artifacts
+      options:
+        - label: I ran `make pipeline` and the artifacts exist
+        - label: "`GET /health` reports `status: ok` with no `runtime_warnings`"
