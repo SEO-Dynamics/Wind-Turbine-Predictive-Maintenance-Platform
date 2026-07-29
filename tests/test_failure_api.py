@@ -119,11 +119,18 @@ def test_openapi_schema_is_generated(client):
 
 
 def test_root_lists_modules_and_roadmap(client):
-    """The root endpoint must advertise built and planned modules."""
+    """The root endpoint must advertise built and planned modules.
+
+    Turbine Health Monitoring moved from ``planned_modules`` to ``modules`` when
+    it was implemented; the remaining two modules are still ahead.
+    """
     body = client.get("/").json()
     assert body["modules"][0]["module"] == "failure_prediction"
+    mounted = {m["module"] for m in body["modules"]}
     planned = {m["module"] for m in body["planned_modules"]}
-    assert "turbine_health_monitoring" in planned
+    assert "turbine_health_monitoring" in mounted
+    assert "anomaly_detection" in planned
+    assert not (mounted & planned), "a module cannot be both mounted and planned"
     assert body["advisory_only"] is True
 
 

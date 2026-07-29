@@ -29,6 +29,7 @@ from wind_turbine_pm.data.preprocessing import (  # noqa: E402
 )
 from wind_turbine_pm.data.synthetic import generate_scada_dataset  # noqa: E402
 from wind_turbine_pm.features.failure_features import build_failure_features  # noqa: E402
+from wind_turbine_pm.health.config import load_health_config  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -163,6 +164,107 @@ def toy_frame() -> pd.DataFrame:
                 }
             )
     return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# Turbine Health Monitoring
+# ---------------------------------------------------------------------------
+@pytest.fixture(scope="session")
+def health_config() -> Config:
+    """The health configuration exactly as shipped."""
+    return load_health_config()
+
+
+@pytest.fixture(scope="session")
+def small_health_config(health_config: Config, small_config: Config) -> Config:
+    """Health configuration scaled down so the suite stays fast.
+
+    The synthetic and split settings are taken from :func:`small_config` so both
+    modules' tests describe the same small fleet, and the health windows are
+    narrowed so the fixtures fit inside the few weeks of history that fleet has.
+    """
+    data = health_config.to_dict()
+    small = small_config.to_dict()
+    data["synthetic"] = small["synthetic"]
+    data["split"] = small["split"]
+    data["random_seed"] = small["random_seed"]
+    data["validation"]["min_rows_per_turbine"] = small["validation"]["min_rows_per_turbine"]
+
+    health = data["health"]
+    health["features"]["windows_hours"] = [6, 12, 24]
+    health["features"]["slope_windows_hours"] = [12]
+    health["features"]["diff_hours"] = [12]
+    health["features"]["baseline_window_hours"] = 48
+    health["features"]["signal_shape"]["window_hours"] = 12
+    health["features"]["signal_shape"]["sensors"] = ["vibration", "gearbox_temperature"]
+    health["features"]["regime_relative"]["min_periods"] = 12
+    health["features"]["regime_relative"]["sensors"] = [
+        "vibration",
+        "gearbox_temperature",
+        "oil_pressure",
+    ]
+    health["features"]["rule_features"]["window_hours"] = 12
+    health["features"]["condition_sensors"] = [
+        "vibration",
+        "gearbox_temperature",
+        "oil_pressure",
+        "power_output",
+    ]
+    health["drift"]["sensors"] = ["vibration", "gearbox_temperature", "oil_pressure"]
+    health["drift"]["min_periods"] = 12
+    health["drift"]["cusum"]["signal_window_hours"] = 48
+    health["drift"]["calibration"]["min_healthy_rows"] = 50
+    health["serving"]["min_history_hours"] = 24
+    return Config(data)
+
+
+@pytest.fixture(scope="session")
+def health_prepared(small_health_config: Config, clean_frame: pd.DataFrame):
+    """Preprocessed, regime-labelled, health-targeted data with its features.
+
+    Built from :func:`clean_frame` (no injected defects) so that rule-violation
+    and data-quality assertions test the rules rather than the deliberately
+    corrupted cells.
+
+    Returns:
+        ``(labelled_frame, feature_matrix, eligible_frame)``.
+    """
+    from wind_turbine_pm.health.health_features import build_health_features
+    from wind_turbine_pm.health.health_score import apply_label_filter, build_health_target
+    from wind_turbine_pm.health.regimes import attach_regimes
+
+    processed, _ = preprocess(clean_frame, small_health_config)
+    regimed = attach_regimes(processed, small_health_config)
+    labelled = build_health_target(regimed, small_health_config)
+    features, _ = build_health_features(labelled, small_health_config)
+    eligible = apply_label_filter(labelled)
+    return labelled, features, eligible
+
+
+@pytest.fixture(scope="session")
+def health_features(health_prepared) -> pd.DataFrame:
+    """The small health feature matrix."""
+    return health_prepared[1]
+
+
+@pytest.fixture
+def health_toy_frame(toy_frame: pd.DataFrame) -> pd.DataFrame:
+    """The tiny two-turbine frame plus the columns the health target needs.
+
+    ``degradation_level`` ramps on turbine ``A`` towards its failure at hour 100
+    and stays at zero on ``B``, so tests can assert that the target and the
+    class banding follow the ground truth in a way that can be checked by hand.
+    """
+    frame = toy_frame.copy()
+    degradation = []
+    for _, row in frame.iterrows():
+        hour = int((row[TIMESTAMP] - frame[TIMESTAMP].min()) / pd.Timedelta("1h"))
+        if row[TURBINE_ID] == "A" and hour <= 100:
+            degradation.append(min(1.0, max(0.0, (hour - 40) / 60.0)))
+        else:
+            degradation.append(0.0)
+    frame["degradation_level"] = degradation
+    return frame
 
 
 @pytest.fixture(scope="session")
