@@ -25,7 +25,13 @@ from pathlib import Path
 import pandas as pd
 
 from wind_turbine_pm.config import Config, load_config
-from wind_turbine_pm.constants import SPLIT_COLUMN, TARGET_COLUMN, TIMESTAMP, TURBINE_ID
+from wind_turbine_pm.constants import (
+    SPLIT_COLUMN,
+    TARGET_COLUMN,
+    TIMESTAMP,
+    TURBINE_ID,
+    SplitName,
+)
 from wind_turbine_pm.data.ingestion import is_synthetic, load_raw_dataset
 from wind_turbine_pm.data.preprocessing import (
     apply_modelling_filter,
@@ -168,6 +174,26 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     positives_by_split = dataset.groupby(SPLIT_COLUMN)[TARGET_COLUMN].agg(["size", "sum", "mean"])
+
+    # A split with no positive labels makes validation and test meaningless, and
+    # surfaces much later as a confusing "every candidate was rejected" during
+    # training. Catch it here, where the cause and the fix are obvious.
+    empty_splits = [
+        str(name)
+        for name in (SplitName.TRAIN, SplitName.VALID, SplitName.TEST)
+        if str(name) in positives_by_split.index and positives_by_split.loc[str(name), "sum"] == 0
+    ]
+    if empty_splits:
+        message = (
+            f"Split(s) {empty_splits} contain no positive labels, so the model cannot be "
+            f"selected or evaluated on them. The dataset is most likely too small or too "
+            f"short for failures to reach every period. Generate more data, e.g.:\n"
+            f"  python scripts/generate_synthetic_data.py --turbines 20 --months 12 --force\n"
+            f"or raise the event rate with --failures-per-year."
+        )
+        if args.strict:
+            raise ValueError(message)
+        logger.error(message)
     logger.info(
         "Preparation complete",
         extra={

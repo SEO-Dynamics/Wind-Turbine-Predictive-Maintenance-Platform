@@ -36,6 +36,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--turbines", type=int, default=None, help="Override synthetic.n_turbines.")
     parser.add_argument("--months", type=int, default=None, help="Override synthetic.months.")
     parser.add_argument("--seed", type=int, default=None, help="Override the random seed.")
+    parser.add_argument(
+        "--failures-per-year",
+        type=float,
+        default=None,
+        help=(
+            "Override synthetic.failures_per_turbine_per_year. Useful for small CI "
+            "datasets, where the default rate can leave a split with no positive labels."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -67,6 +76,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.seed is not None:
         overrides["synthetic"]["seed"] = args.seed
         overrides["random_seed"] = args.seed
+    if args.failures_per_year is not None:
+        overrides["synthetic"]["failures_per_turbine_per_year"] = args.failures_per_year
     cfg = Config(overrides)
 
     set_global_seed(int(cfg.get("random_seed", 42)))

@@ -80,13 +80,19 @@ jobs:
           "
 
       - name: Smoke-test the pipeline on a tiny dataset
-        # A 3-turbine, 2-month run exercises every stage end to end (generate ->
-        # prepare -> train -> evaluate) in well under a minute, without doing a
-        # full training run on every commit.
+        # Exercises every stage end to end (generate -> prepare -> train ->
+        # evaluate) without a full training run on every commit.
+        #
+        # The dataset must be large enough that failures reach *every*
+        # chronological split: with too few turbines or months they all land in
+        # the training period, validation and test end up with no positive
+        # labels, and model selection correctly refuses to publish anything.
+        # 6 turbines x 6 months at an elevated event rate gives ~960/157/288
+        # positives across train/valid/test.
         if: matrix.python-version == '3.13'
         run: |
-          python scripts/generate_synthetic_data.py --turbines 3 --months 3 --force
-          python scripts/prepare_data.py --force
+          python scripts/generate_synthetic_data.py --turbines 6 --months 6 --failures-per-year 12 --force
+          python scripts/prepare_data.py --force --strict
           python scripts/train_failure_model.py
           python scripts/evaluate_failure_model.py --explain-samples 200
           test -f artifacts/models/failure_model.joblib
