@@ -46,6 +46,27 @@ def broken_client(tmp_path) -> TestClient:
     app.dependency_overrides.clear()
 
 
+class _ReadyStub:
+    """Minimal stand-in that satisfies the readiness gate but never predicts.
+
+    Request-body validation happens *after* FastAPI resolves dependencies, so
+    without a model the readiness gate short-circuits every request with 503 and
+    schema-rejection tests can never reach their assertion. This stub keeps those
+    tests meaningful in any environment, including CI before the pipeline runs.
+    """
+
+    is_ready = True
+    metadata = object()
+
+
+@pytest.fixture
+def schema_client() -> TestClient:
+    """A client whose service is 'ready', for testing request-schema rejection."""
+    app.dependency_overrides[provide_service] = _ReadyStub
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
 def _window_payload(turbine: str = "T01", hours: int = 96) -> dict:
     end = datetime(2025, 6, 1, tzinfo=UTC)
     return {
@@ -251,9 +272,9 @@ def test_prepared_prediction_rejects_incomplete_features(client):
     assert "/failure/features" in detail["hint"]
 
 
-def test_malformed_body_returns_structured_error(client):
+def test_malformed_body_returns_structured_error(schema_client):
     """A schema violation must return the structured validation envelope."""
-    response = client.post("/failure/predict", json={"turbine_id": "T01"})
+    response = schema_client.post("/failure/predict", json={"turbine_id": "T01"})
     assert response.status_code == 422
     body = response.json()
     assert body["error"] == "validation_error"
@@ -261,20 +282,20 @@ def test_malformed_body_returns_structured_error(client):
     assert body["errors"]
 
 
-def test_impossible_sensor_value_is_rejected(client):
+def test_impossible_sensor_value_is_rejected(schema_client):
     """Out-of-range sensor input must be refused at the schema boundary."""
     payload = _window_payload(hours=3)
     payload["observations"][0]["vibration"] = 99999.0
-    assert client.post("/failure/predict", json=payload).status_code == 422
+    assert schema_client.post("/failure/predict", json=payload).status_code == 422
 
 
-def test_unknown_field_is_rejected(client):
+def test_unknown_field_is_rejected(schema_client):
     """Unexpected fields must be refused rather than silently ignored."""
     payload = _window_payload(hours=3)
     payload["surprise"] = 1
-    assert client.post("/failure/predict", json=payload).status_code == 422
+    assert schema_client.post("/failure/predict", json=payload).status_code == 422
 
 
-def test_empty_batch_is_rejected(client):
+def test_empty_batch_is_rejected(schema_client):
     """An empty batch must fail schema validation."""
-    assert client.post("/failure/predict/batch", json={"windows": []}).status_code == 422
+    assert schema_client.post("/failure/predict/batch", json={"windows": []}).status_code == 422

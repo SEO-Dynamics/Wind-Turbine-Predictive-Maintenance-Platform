@@ -60,12 +60,16 @@ def render() -> None:
             PIPELINE_COMMAND,
             service.status().detail,
         )
-        st.stop()
+        # `return`, not `st.stop()`: st.stop() only halts inside a Streamlit
+        # script run. Under a plain `import dashboard.app` - which CI does as a
+        # smoke test - it does not halt, and execution would fall through to
+        # code that assumes artifacts exist.
+        return
 
     scored = score_split("test")
     if scored is None or scored.empty:
         missing_artifact_notice("Scored fleet data", PIPELINE_COMMAND)
-        st.stop()
+        return
 
     as_of = _as_of_selector(scored)
     _executive_summary(service, scored, as_of)
