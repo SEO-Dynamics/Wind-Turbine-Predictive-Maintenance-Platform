@@ -1,0 +1,103 @@
+# ---------------------------------------------------------------------------
+# Wind Turbine Predictive Maintenance Platform - local stack.
+#
+#   docker compose up --build
+#
+#   API        http://localhost:8000       (Swagger at /docs)
+#   Dashboard  http://localhost:8501
+#
+# Neither service trains a model. Build the artifacts once on the host with
+#   python scripts/run_failure_pipeline.py
+# (or run the one-shot `pipeline` profile below); both services read them from
+# the mounted ./artifacts and ./data directories.
+# ---------------------------------------------------------------------------
+name: wind-turbine-pm
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wind-turbine-pm:latest
+    container_name: wtpm-api
+    command:
+      - uvicorn
+      - wind_turbine_pm.api.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    ports:
+      - "8000:8000"
+    environment:
+      WTPM_PROJECT_ROOT: /app
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      # Read-only: the services consume artifacts, they never produce them.
+      - ./artifacts:/app/artifacts:ro
+      - ./data:/app/data:ro
+      - ./configs:/app/configs:ro
+    healthcheck:
+      # /health returns 200 even when the model is missing (reporting
+      # "degraded"), so the container is healthy as soon as it can serve.
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wind-turbine-pm:latest
+    container_name: wtpm-dashboard
+    command:
+      - streamlit
+      - run
+      - dashboard/app.py
+      - --server.port
+      - "8501"
+      - --server.address
+      - 0.0.0.0
+      - --server.headless
+      - "true"
+    ports:
+      - "8501:8501"
+    environment:
+      WTPM_PROJECT_ROOT: /app
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+      - ./data:/app/data:ro
+      - ./configs:/app/configs:ro
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # Opt-in one-shot job that builds the artifacts inside Docker:
+  #   docker compose --profile pipeline run --rm pipeline
+  # It is not part of `docker compose up`, so starting the stack never triggers
+  # an expensive training run by accident.
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wind-turbine-pm:latest
+    container_name: wtpm-pipeline
+    profiles: ["pipeline"]
+    command: ["python", "scripts/run_failure_pipeline.py"]
+    environment:
+      WTPM_PROJECT_ROOT: /app
+    volumes:
+      # Writable here: this is the only service allowed to produce artifacts.
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./configs:/app/configs:ro

@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "develop", "feature/**"]
+  pull_request:
+    branches: ["main", "develop"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  quality:
+    name: Lint and test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # requirements.txt is pinned and already contains the dev tools;
+          # --no-deps stops the editable install from resolving around the pins.
+          pip install -r requirements.txt
+          pip install -e . --no-deps
+
+      - name: Ruff lint
+        run: ruff check --output-format=github .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      # The suite builds its own small fixtures and never trains a
+      # production-scale model, so it runs in seconds on every commit.
+      - name: Pytest
+        run: pytest -q --maxfail=1
+
+      - name: FastAPI import test
+        run: python -c "from wind_turbine_pm.api.main import app; print(app.title)"
+
+      - name: Dashboard import test
+        run: python -c "import dashboard.app; print(len(dashboard.app.PAGES), 'dashboard pages')"
+
+      - name: API health check (no model artifacts present)
+        # Verifies the documented degraded-mode contract: the API must start and
+        # answer /health even when no model has been trained.
+        run: |
+          python -m uvicorn wind_turbine_pm.api.main:app --host 127.0.0.1 --port 8000 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/health > health.json; then break; fi
+            sleep 1
+          done
+          cat health.json
+          python -c "
+          import json, sys
+          body = json.load(open('health.json'))
+          assert body['status'] in ('ok', 'degraded'), body
+          assert 'model_loaded' in body, body
+          print('health OK:', body['status'])
+          "
+
+      - name: Smoke-test the pipeline on a tiny dataset
+        # A 3-turbine, 2-month run exercises every stage end to end (generate ->
+        # prepare -> train -> evaluate) in well under a minute, without doing a
+        # full training run on every commit.
+        if: matrix.python-version == '3.13'
+        run: |
+          python scripts/generate_synthetic_data.py --turbines 3 --months 3 --force
+          python scripts/prepare_data.py --force
+          python scripts/train_failure_model.py
+          python scripts/evaluate_failure_model.py --explain-samples 200
+          test -f artifacts/models/failure_model.joblib
+          test -f artifacts/metadata/failure_model_metadata.json
+          test -f artifacts/metadata/failure_threshold.json
+          test -f artifacts/metrics/failure_metrics.json
+          echo "Pipeline smoke test passed"
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-${{ matrix.python-version }}
+          path: |
+            artifacts/
+            health.json
+          retention-days: 5
+          if-no-files-found: ignore
+
+  docker:
+    name: Docker build validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate the compose file
+        run: docker compose config --quiet
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: wind-turbine-pm:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify the image starts and serves /health
+        run: |
+          docker run -d --name wtpm-ci -p 8000:8000 wind-turbine-pm:ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/health; then
+              echo "\nContainer healthy"
+              docker rm -f wtpm-ci
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Container did not become healthy"
+          docker logs wtpm-ci
+          docker rm -f wtpm-ci
+          exit 1

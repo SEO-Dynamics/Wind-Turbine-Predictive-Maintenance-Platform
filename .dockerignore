@@ -1,0 +1,30 @@
+# Keep the build context small and free of local state.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Generated data and artifacts are mounted at runtime, never baked in.
+data/raw/*
+data/interim/*
+data/processed/*
+!data/samples/
+artifacts/models/*
+artifacts/metrics/*
+artifacts/figures/*
+artifacts/metadata/*
+
+.git/
+.github/
+notebooks/
+tests/
+docs/
+*.md
+!README.md
+.env
+.DS_Store
