@@ -7,7 +7,8 @@
 .DEFAULT_GOAL := help
 .PHONY: help install install-dev data prepare train evaluate pipeline test test-fast \
         lint format typecheck api dashboard docs-figures docker-build docker-up docker-down \
-        clean clean-all
+        clean clean-all prepare-health train-health health-pipeline health-pipeline-force \
+        pipeline-all
 
 PYTHON ?= python
 PIP    ?= $(PYTHON) -m pip
@@ -46,6 +47,26 @@ pipeline:  ## Run the full pipeline end to end (data -> prepare -> train -> eval
 
 pipeline-force:  ## Rebuild everything from scratch, ignoring caches
 	$(PYTHON) scripts/run_failure_pipeline.py --force
+
+# --- Turbine Health Monitoring ---------------------------------------------
+# The health module reuses the same raw dataset, so `health-pipeline` does not
+# regenerate it unless --force is passed. That is deliberate: both modules must
+# describe the same fleet.
+prepare-health:  ## Validate, label and feature-engineer the health dataset
+	$(PYTHON) scripts/prepare_health_data.py
+
+train-health:  ## Train the health-score model and fit the drift detectors
+	$(PYTHON) scripts/train_health_model.py
+
+health-pipeline:  ## Run the health pipeline end to end (prepare -> train)
+	$(PYTHON) scripts/run_health_pipeline.py
+
+health-pipeline-force:  ## Rebuild the health data and model from scratch
+	$(PYTHON) scripts/run_health_pipeline.py --force
+
+pipeline-all:  ## Run both module pipelines against one shared dataset
+	$(PYTHON) scripts/run_failure_pipeline.py
+	$(PYTHON) scripts/run_health_pipeline.py
 
 # --- Quality ---------------------------------------------------------------
 test:  ## Run the full test suite
@@ -99,4 +120,4 @@ clean:  ## Remove caches and temporary files
 clean-all: clean  ## Also remove generated data and model artifacts
 	rm -rf data/raw/* data/interim/* data/processed/*
 	rm -rf artifacts/models/* artifacts/metrics/* artifacts/figures/* artifacts/metadata/*
-	@echo "Generated data and artifacts removed. Rebuild with: make pipeline"
+	@echo "Generated data and artifacts removed. Rebuild with: make pipeline-all"

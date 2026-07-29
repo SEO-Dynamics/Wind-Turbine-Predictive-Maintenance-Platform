@@ -59,7 +59,13 @@ jobs:
         run: python -c "from wind_turbine_pm.api.main import app; print(app.title)"
 
       - name: Dashboard import test
-        run: python -c "import dashboard.app; print(len(dashboard.app.PAGES), 'dashboard pages')"
+        run: |
+          python -c "
+          import dashboard.app as app
+          available = [p.label for p in app.PAGES if p.available]
+          print(len(app.PAGES), 'dashboard pages;', len(available), 'available:', available)
+          assert 'Turbine Health Monitoring' in available, available
+          "
 
       - name: API health check (no model artifacts present)
         # Verifies the documented degraded-mode contract: the API must start and
@@ -76,7 +82,13 @@ jobs:
           body = json.load(open('health.json'))
           assert body['status'] in ('ok', 'degraded'), body
           assert 'model_loaded' in body, body
-          print('health OK:', body['status'])
+          # Both modules must report their own artifact status, and each must be
+          # able to serve independently of the other.
+          modules = body['modules']
+          for name in ('failure_prediction', 'turbine_health_monitoring'):
+              assert name in modules, modules
+              assert 'model_loaded' in modules[name], modules[name]
+          print('health OK:', body['status'], {k: v['model_loaded'] for k, v in modules.items()})
           "
 
       - name: Smoke-test the pipeline on a tiny dataset
@@ -101,15 +113,84 @@ jobs:
           test -f artifacts/metrics/failure_metrics.json
           echo "Pipeline smoke test passed"
 
-      - name: Re-run the artifact-dependent tests
-        # 21 tests skip in the run above because no model exists yet - and they
-        # are the ones that matter most: real predictions, batch scoring,
-        # explanation schema, risk-band mapping and runtime/artifact version
-        # compatibility. Now that the smoke test has produced artifacts, run
-        # them for real so CI actually validates a trained model end to end.
+      - name: Smoke-test the health pipeline on the same dataset
+        # Runs against the dataset the failure smoke test just generated, without
+        # --force, which is what proves the two modules describe the same fleet
+        # rather than each regenerating their own.
         if: matrix.python-version == '3.13'
         run: |
-          pytest -q tests/test_prediction_service.py tests/test_failure_api.py -p no:randomly \
+          python scripts/run_health_pipeline.py --strict
+          test -f artifacts/models/health_model.joblib
+          test -f artifacts/models/health_drift_detector.joblib
+          test -f artifacts/metadata/health_model_metadata.json
+          test -f artifacts/metrics/health_metrics.json
+          test -f data/processed/health_dataset.parquet
+          test -f data/processed/health_features.parquet
+          echo "Health pipeline smoke test passed"
+
+      - name: Verify the drift detector is calibrated and discriminating
+        # Regression guard for a defect that made the module quietly useless: with
+        # an un-reset CUSUM and textbook control limits, 92% of all observations
+        # took the maximum drift penalty. A deduction that applies almost
+        # everywhere is a constant offset on every health score, not a signal.
+        if: matrix.python-version == '3.13'
+        run: |
+          python -c "
+          import json, pandas as pd
+          from wind_turbine_pm.health.config import load_health_config
+          from wind_turbine_pm.services.health_monitoring_service import HealthMonitoringService
+          from wind_turbine_pm.utils.io import read_table
+
+          cfg = load_health_config()
+          service = HealthMonitoringService(cfg)
+          assert service.is_ready, service.status().detail
+
+          calibration = service.drift_calibration
+          assert calibration is not None, 'the artifact carries no drift calibration'
+          assert calibration.warning_at, 'no CUSUM thresholds were fitted'
+          assert calibration.ewma_warning_at, 'no EWMA thresholds were fitted'
+
+          dataset = read_table('data/processed/health_dataset.parquet')
+          features = read_table('data/processed/health_features.parquet')
+          scored = service.score_frame(dataset, features)
+          penalty = scored['raw_health_score'] - scored['health_score']
+          cap = float(cfg.get('health.drift.penalty.max_points', 15.0))
+          saturated = float((penalty >= cap - 1e-6).mean())
+          print(f'drift penalty: mean={penalty.mean():.2f}, {saturated:.1%} at the cap')
+          assert saturated < 0.5, f'{saturated:.1%} of rows take the maximum drift penalty'
+          "
+
+      - name: Health API check
+        if: matrix.python-version == '3.13'
+        run: |
+          python -c "
+          from fastapi.testclient import TestClient
+          from wind_turbine_pm.api.main import app
+
+          client = TestClient(app)
+          body = client.get('/health').json()
+          assert body['modules']['turbine_health_monitoring']['model_loaded'], body
+          example = client.get('/health-monitoring/example').json()
+          response = client.post('/health-monitoring/assess', json=example['window_request'])
+          assert response.status_code == 200, response.text
+          assessment = response.json()
+          assert assessment['advisory_only'] is True
+          # The documented example must not look pathological.
+          assert assessment['data_quality'] > 0.9, assessment['data_quality']
+          print('health assess OK:', assessment['health_score'], assessment['health_class'])
+          "
+
+      - name: Re-run the artifact-dependent tests
+        # Many tests skip in the run above because no model exists yet - and they
+        # are the ones that matter most: real predictions, batch scoring,
+        # explanation schema, risk-band mapping, health assessments, the drift
+        # calibration and runtime/artifact version compatibility. Now that both
+        # smoke tests have produced artifacts, run them for real so CI actually
+        # validates trained models end to end.
+        if: matrix.python-version == '3.13'
+        run: |
+          pytest -q tests/test_prediction_service.py tests/test_failure_api.py \
+            tests/test_health_service.py tests/test_health_api.py -p no:randomly \
             | tee pytest-artifacts.log
           if grep -qE "[0-9]+ skipped" pytest-artifacts.log; then
             echo "::error::Artifact-dependent tests still skipped - artifacts were not picked up"
