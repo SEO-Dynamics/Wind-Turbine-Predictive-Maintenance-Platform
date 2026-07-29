@@ -1,0 +1,21 @@
+# Streamlit runtime configuration.
+#
+# `showSidebarNavigation = false` disables Streamlit's automatic multipage
+# navigation. The project keeps its pages in `dashboard/pages/` (which Streamlit
+# would otherwise auto-discover) but drives navigation explicitly from
+# `dashboard/app.py`, so that planned-but-unbuilt modules can be listed in the
+# roadmap without becoming clickable dead pages.
+[client]
+showSidebarNavigation = false
+showErrorDetails = true
+
+[server]
+headless = true
+fileWatcherType = "poll"
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#2b6cb0"

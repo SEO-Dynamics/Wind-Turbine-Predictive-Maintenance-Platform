@@ -1,0 +1,101 @@
+# ---------------------------------------------------------------------------
+# Dataset generation, validation and preprocessing configuration.
+# ---------------------------------------------------------------------------
+data:
+  # "synthetic" is the only source implemented in this module. The ingestion
+  # layer exposes a CSV/Parquet reader so a real SCADA export can be dropped in
+  # later without touching downstream code (see docs/OZAN_HANDOFF.md).
+  source: synthetic
+  raw_filename: scada_raw.parquet
+  sample_filename: scada_sample.csv
+  sample_rows: 600
+
+synthetic:
+  n_turbines: 20
+  start: "2024-01-01T00:00:00"
+  months: 12                     # 12 months of coverage
+  freq: "1h"                     # pandas offset alias; "10min" / "30min" also work
+  seed: 42
+  # Missingness and data-quality injection (exercised by the validation layer).
+  missing_rate: 0.012            # fraction of sensor cells set to NaN
+  invalid_rate: 0.0015           # fraction of cells set to physically impossible values
+  duplicate_rate: 0.0008         # fraction of rows duplicated
+  # Failure process
+  failures_per_turbine_per_year: 4.0
+  degradation_hours_min: 96      # shortest pre-failure degradation ramp
+  degradation_hours_max: 336     # longest pre-failure degradation ramp
+  repair_hours_min: 8
+  repair_hours_max: 36
+  recovery_hours: 72             # post-maintenance settling period
+  # Fraction of degradation episodes that heal on their own (no failure).
+  # Keeps the problem non-trivial: degradation is necessary but not sufficient.
+  benign_degradation_ratio: 0.45
+  # Scheduled (non-failure) maintenance
+  scheduled_maintenance_per_year: 2.0
+
+validation:
+  max_missing_fraction: 0.15     # per-column error threshold
+  warn_missing_fraction: 0.05    # per-column warning threshold
+  min_rows_per_turbine: 720      # ~30 days at 1h
+  # Physically plausible ranges [min, max]. Values outside are flagged.
+  physical_ranges:
+    wind_speed: [0.0, 45.0]
+    rotor_speed: [0.0, 25.0]
+    generator_speed: [0.0, 2200.0]
+    power_output: [-100.0, 3600.0]
+    generator_temperature: [-30.0, 200.0]
+    gearbox_temperature: [-30.0, 160.0]
+    bearing_temperature: [-30.0, 160.0]
+    oil_temperature: [-30.0, 130.0]
+    oil_pressure: [0.0, 12.0]
+    vibration: [0.0, 25.0]
+    ambient_temperature: [-45.0, 55.0]
+    nacelle_temperature: [-45.0, 90.0]
+    hydraulic_pressure: [0.0, 300.0]
+    brake_temperature: [-30.0, 400.0]
+  allowed_operational_status:
+    - normal
+    - idle
+    - derated
+    - maintenance
+    - fault
+
+preprocessing:
+  # Forward fill is only applied to slow-moving sensor channels and only within
+  # a turbine, with a hard limit, because it uses past information only.
+  ffill_limit: 3
+  # Columns where forward filling is physically justified (thermal inertia,
+  # slow hydraulic dynamics). Fast-moving channels use robust imputation.
+  ffill_columns:
+    - generator_temperature
+    - gearbox_temperature
+    - bearing_temperature
+    - oil_temperature
+    - nacelle_temperature
+    - ambient_temperature
+    - brake_temperature
+    - oil_pressure
+    - hydraulic_pressure
+  clip_to_physical_ranges: true
+  # Rows whose timestamp/turbine_id are missing cannot be repaired -> dropped
+  # and reported (never silently).
+  drop_rows_missing_keys: true
+
+target:
+  name: failure_within_48h
+  horizon_hours: 48
+  # Observations recorded while the turbine is in `fault` or `maintenance`
+  # state are excluded from modelling: the failure is already known at that
+  # point, so keeping them would leak the outcome.
+  exclude_states: [fault, maintenance]
+  # Additional hours after a repair completes that are dropped, because the
+  # turbine is in a post-maintenance transient and not representative.
+  post_repair_exclusion_hours: 6
+
+split:
+  # Chronological split fractions over the global time axis.
+  train_end_fraction: 0.60
+  valid_end_fraction: 0.80
+  # Embargo (gap) applied at each boundary. Must be >= target horizon so that
+  # no training label can be derived from a validation-period failure.
+  embargo_hours: 48

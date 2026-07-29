@@ -1,0 +1,109 @@
+# ---------------------------------------------------------------------------
+# Leakage-safe feature engineering configuration.
+#
+# Every temporal operation below is applied with `groupby("turbine_id")` and
+# uses past-or-present information only. See
+# `wind_turbine_pm.features.failure_features` for the implementation.
+# ---------------------------------------------------------------------------
+features:
+  # Sensor channels carried through unchanged (the "raw operating" group).
+  raw_sensors:
+    - wind_speed
+    - rotor_speed
+    - generator_speed
+    - power_output
+    - generator_temperature
+    - gearbox_temperature
+    - bearing_temperature
+    - oil_temperature
+    - oil_pressure
+    - vibration
+    - ambient_temperature
+    - nacelle_temperature
+    - hydraulic_pressure
+    - brake_temperature
+
+  # Subset used for the (expensive) lag / rolling / trend expansions. Keeping
+  # this narrower than `raw_sensors` bounds dimensionality and keeps the
+  # feature matrix interpretable.
+  dynamic_sensors:
+    - vibration
+    - gearbox_temperature
+    - bearing_temperature
+    - generator_temperature
+    - oil_temperature
+    - oil_pressure
+    - hydraulic_pressure
+    - power_output
+    - rotor_speed
+
+  # Lags are expressed in hours and converted to row offsets using the
+  # observed sampling frequency.
+  lags_hours: [1, 3, 6, 12, 24]
+
+  rolling:
+    windows_hours: [3, 6, 12, 24, 48]
+    # Statistics computed per window. "range" = max - min.
+    stats: [mean, std, min, max, median, range]
+    # Only these sensors get the full statistic set; the rest get mean/std to
+    # keep the matrix manageable.
+    full_stat_sensors:
+      - vibration
+      - gearbox_temperature
+      - bearing_temperature
+      - oil_pressure
+    min_periods_fraction: 0.5
+
+  trend:
+    # Rolling OLS slope windows (hours) and simple difference lags (hours).
+    slope_windows_hours: [6, 12, 24]
+    diff_hours: [1, 6, 24]
+    pct_change_hours: [6, 24]
+    # Baseline deviation: value minus rolling mean over this window.
+    baseline_window_hours: 24
+
+  interactions:
+    enabled: true
+    # Rated values used for the power-curve reference model (see MODEL_CARD).
+    rated_power_kw: 2000.0
+    rated_wind_speed: 12.5
+    cut_in_wind_speed: 3.0
+    cut_out_wind_speed: 25.0
+
+  turbine_relative:
+    enabled: true
+    # Expanding baselines are shifted by one observation so the current value
+    # never contributes to its own baseline.
+    min_periods: 48
+    robust_z_floor: 1.0e-6
+
+  time_features:
+    enabled: true
+    cyclical: true
+    # Which calendar components become features.
+    #
+    # Only `hour` is enabled by default, deliberately. Hour-of-day is a genuine
+    # periodic driver (diurnal wind and thermal cycles) that repeats inside
+    # every split. `month` and `day_of_week` are different: under a
+    # chronological split the training period covers one set of months and the
+    # test period covers another, so the model can only ever meet unseen values
+    # at test time. Measured on this dataset, enabling them made `month` the
+    # single highest-importance feature by SHAP while *lowering* test PR-AUC
+    # from 0.604 to 0.572 - a spurious crutch, not signal.
+    #
+    # Set to [hour, day_of_week, month] to reproduce that behaviour, or keep
+    # the default. With multiple years of data, seasonality would be worth
+    # revisiting.
+    components: [hour]
+
+  # Columns that must never enter the model matrix.
+  exclude_columns:
+    - timestamp
+    - turbine_id
+    - failure_event
+    - maintenance_event
+    - operational_status
+    - degradation_level
+    - failure_mode
+    - episode_id
+    - hours_to_failure

@@ -1,0 +1,60 @@
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# --- Environments ---------------------------------------------------------
+.venv/
+venv/
+env/
+.python-version
+
+# --- Tooling caches -------------------------------------------------------
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+.coverage
+coverage.xml
+htmlcov/
+
+# --- Secrets --------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Generated data -------------------------------------------------------
+# The full dataset is reproducible from a seed, so it is never committed.
+# `data/samples/` IS committed: it is a small extract that documents the schema.
+data/raw/*
+data/interim/*
+data/processed/*
+!data/**/.gitkeep
+
+# `data/samples/` IS committed on purpose: a small extract documents the schema
+# for reviewers and for the next engineers, without shipping the full dataset.
+!data/samples/
+
+# --- Model artifacts ------------------------------------------------------
+# Regenerate with: python scripts/run_failure_pipeline.py
+artifacts/models/*
+artifacts/metrics/*
+artifacts/figures/*
+artifacts/metadata/*
+!artifacts/**/.gitkeep
+*.joblib
+*.pkl
+*.tmp
+
+# --- OS / editor ----------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

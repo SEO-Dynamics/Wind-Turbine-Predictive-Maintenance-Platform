@@ -1,0 +1,50 @@
+# ---------------------------------------------------------------------------
+# Pinned runtime environment.
+#
+# These are the exact versions used to produce the published model artifact.
+# They are pinned rather than ranged because a serialised scikit-learn estimator
+# is only guaranteed to load under the version that wrote it: the Docker image
+# mounts `artifacts/` from the host, so an unpinned container would unpickle a
+# model built by a different scikit-learn and could misbehave silently.
+#
+# `pyproject.toml` keeps the abstract (ranged) dependency metadata for
+# `pip install -e .`; this file is the concrete, reproducible environment.
+#
+# Requires Python 3.12+ (scipy 1.18 and shap 0.52 dropped 3.11).
+# Regenerate after upgrading with:  pip freeze > requirements.txt
+# ---------------------------------------------------------------------------
+
+# Core numerical / data stack
+numpy==2.4.6
+pandas==2.3.3
+scipy==1.18.0
+pyarrow==24.0.0
+
+# Machine learning  (scikit-learn and joblib determine artifact compatibility)
+scikit-learn==1.9.0
+joblib==1.5.3
+
+# Explainability
+shap==0.52.0
+
+# Configuration & validation
+PyYAML==6.0.3
+pydantic==2.13.4
+python-dotenv==1.2.2
+
+# Visualisation
+matplotlib==3.11.1
+plotly==6.9.0
+
+# API
+fastapi==0.141.0
+uvicorn[standard]==0.52.0
+
+# Dashboard
+streamlit==1.60.0
+
+# Tooling / tests
+pytest==9.1.1
+pytest-cov==7.1.0
+httpx==0.28.1
+ruff==0.16.0

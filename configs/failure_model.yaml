@@ -1,0 +1,117 @@
+# ---------------------------------------------------------------------------
+# Failure Prediction Module: training, threshold and serving configuration.
+# ---------------------------------------------------------------------------
+model:
+  name: failure_prediction
+  version: "1.0.0"
+  artifact_filename: failure_model.joblib
+  metadata_filename: failure_model_metadata.json
+  threshold_filename: failure_threshold.json
+  metrics_filename: failure_metrics.json
+  comparison_filename: model_comparison.csv
+
+training:
+  # Candidate models trained and compared. `enabled: false` skips a candidate.
+  candidates:
+    dummy:
+      enabled: true
+      params:
+        strategy: stratified
+    logistic_regression:
+      enabled: true
+      params:
+        C: 0.5
+        max_iter: 2000
+        class_weight: balanced
+        solver: lbfgs
+    random_forest:
+      enabled: true
+      params:
+        n_estimators: 300
+        max_depth: 14
+        min_samples_leaf: 20
+        max_features: sqrt
+        class_weight: balanced_subsample
+        n_jobs: -1
+    hist_gradient_boosting:
+      enabled: true
+      params:
+        max_iter: 400
+        learning_rate: 0.06
+        max_depth: 6
+        min_samples_leaf: 40
+        l2_regularization: 1.0
+        early_stopping: true
+        validation_fraction: 0.15
+        n_iter_no_change: 30
+      # HistGradientBoosting has no class_weight; positive weight is applied
+      # through sample_weight at fit time.
+      positive_class_weight: auto
+  # Probability calibration fitted on the validation split for tree models that
+  # produce poorly calibrated scores. "none" | "isotonic" | "sigmoid"
+  calibration: sigmoid
+  # Selection criteria applied to the *validation* split only.
+  #
+  # The primary criterion is the expected illustrative cost per observation at
+  # each candidate's own optimised threshold (lower is better). This is
+  # deliberately not PR-AUC: PR-AUC is threshold-free and rewards ranking
+  # quality, but the operational decision is asymmetric (a missed failure costs
+  # five times an unnecessary inspection), and a candidate can rank well on
+  # PR-AUC while operating at a recall that is unacceptable in practice.
+  # PR-AUC is retained as a guard rail via min_pr_auc_ratio.
+  selection:
+    primary_metric: cost_per_sample
+    tie_breakers: [f2, recall, pr_auc]
+    # Candidates whose primary metric is within this relative band of the best
+    # are treated as tied and separated by the tie-breakers instead. Without it
+    # the winner flips between runs on sub-percent differences that are noise,
+    # and the tie-breakers never fire (exact ties never occur on real-valued
+    # metrics). 5% of an expected cost is well inside run-to-run variation.
+    primary_tolerance: 0.05
+    # A candidate is rejected if its validation recall at the optimised
+    # threshold falls below this floor.
+    min_recall: 0.30
+    # A candidate is rejected if its PR-AUC is below this fraction of the best
+    # candidate's PR-AUC, so a cheap-but-poorly-ranking model cannot win.
+    min_pr_auc_ratio: 0.80
+
+threshold:
+  # Grid searched over the validation split only.
+  grid_start: 0.01
+  grid_stop: 0.99
+  grid_steps: 197
+  # "f2" (maximise F-beta with beta=2) or "cost" (minimise expected cost).
+  method: cost
+  # HYPOTHETICAL illustrative cost units - not calibrated against any real
+  # operator's economics. See MODEL_CARD.md.
+  costs:
+    false_negative: 10.0
+    false_positive: 2.0
+    true_positive: 1.0
+    true_negative: 0.0
+
+risk_levels:
+  # Risk banding is deliberately independent of the binary decision threshold.
+  low_max: 0.30       # probability <  0.30            -> low
+  medium_max: 0.65    # 0.30 <= probability < 0.65     -> medium
+                      # probability >= 0.65            -> high
+
+explainability:
+  enabled: true
+  # Rows sampled from the training split to build the SHAP background set.
+  background_samples: 200
+  # Rows from the test split used for global SHAP summary figures.
+  explain_samples: 1000
+  # The permutation fallback costs 2 * n_features + 1 model evaluations per row,
+  # so it uses a much smaller sample than the exact tree explainer.
+  explain_samples_permutation: 150
+  top_k_factors: 5
+  # Fallback when SHAP is unavailable or incompatible with the fitted model.
+  fallback: permutation_importance
+  permutation_repeats: 5
+
+serving:
+  # Minimum number of historical observations required by /failure/predict so
+  # that the 48h rolling windows can be computed.
+  min_history_hours: 72
+  max_batch_turbines: 200

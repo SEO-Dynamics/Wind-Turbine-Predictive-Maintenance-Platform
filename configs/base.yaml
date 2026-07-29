@@ -1,0 +1,29 @@
+# ---------------------------------------------------------------------------
+# Base configuration shared by every module of the platform.
+# Module-specific files (data.yaml, features.yaml, failure_model.yaml) are
+# merged on top of this file by `wind_turbine_pm.config.load_config`.
+# ---------------------------------------------------------------------------
+project:
+  name: wind-turbine-predictive-maintenance
+  module: failure_prediction
+  version: "1.0.0"
+
+# Global reproducibility seed. Every stochastic component derives from this.
+random_seed: 42
+
+logging:
+  level: INFO
+  format: "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+  datefmt: "%Y-%m-%dT%H:%M:%S"
+  json: false
+
+# Relative to the repository root. Resolved by `wind_turbine_pm.utils.paths`.
+paths:
+  data_raw: data/raw
+  data_interim: data/interim
+  data_processed: data/processed
+  data_samples: data/samples
+  artifacts_models: artifacts/models
+  artifacts_metrics: artifacts/metrics
+  artifacts_figures: artifacts/figures
+  artifacts_metadata: artifacts/metadata
