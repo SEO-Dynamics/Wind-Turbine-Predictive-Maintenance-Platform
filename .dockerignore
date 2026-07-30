@@ -7,7 +7,11 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+*.log
+*.pid
 
 # Generated data and artifacts are mounted at runtime, never baked in.
 data/raw/*
@@ -27,4 +31,17 @@ docs/
 *.md
 !README.md
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_ed25519
+*.db
+*.sqlite
+*.sqlite3
 .DS_Store

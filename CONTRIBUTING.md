@@ -1,13 +1,13 @@
 # Contributing
 
-This is a three-stage collaborative project. Stages 1 and 2 are complete; Stage 3 builds
-on top of them.
+This is a three-stage collaborative project. All three modules are implemented; changes
+must preserve their shared contracts and independent artifact readiness.
 
 | Stage | Module | Author | Branch | Status |
 |---|---|---|---|---|
 | 1 | Failure Prediction | [@onurozansunger](https://github.com/onurozansunger) | `feature/ozan-failure-prediction` | ✅ Complete |
 | 2 | Turbine Health Monitoring | [@SBRKBNL](https://github.com/SBRKBNL) | `feature/turbine-health-monitoring` | ✅ Complete |
-| 3 | Anomaly Detection & Decision Support | — | `feature/<name>-anomaly-detection` | ⏳ Planned |
+| 3 | Anomaly Detection & Decision Support | [@emirsseven](https://github.com/emirsseven) | `feature/emir-anomaly-detection` | ✅ Implemented |
 
 **Before writing any code, read [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md).** It
 documents the data, feature, artifact and API contracts your module must respect, the
@@ -24,14 +24,14 @@ Requires **Python 3.12+**.
 ```bash
 python -m venv .venv && source .venv/bin/activate
 make install
-make pipeline-all      # ~4 min: generates data, then trains both modules on it
+make pipeline-all      # failure -> health -> anomaly on one shared raw fleet
 make test
 ```
 
-`make pipeline-all` runs the failure and health pipelines in order against **one** shared
-raw dataset. The health pipeline deliberately does not regenerate the data, so both
-modules always describe the same fleet. Run them separately with `make pipeline` and
-`make health-pipeline` if you only need one.
+`make pipeline-all` runs failure, health and anomaly pipelines in order against **one**
+shared raw dataset. Downstream pipelines deliberately do not regenerate the data. Run
+them separately with `make pipeline`, `make health-pipeline` or `make anomaly-pipeline`
+if you only need one.
 
 If `import wind_turbine_pm` fails after the editable install (happens on some sandboxed
 macOS shells), use `export PYTHONPATH=src`.
@@ -126,8 +126,14 @@ Enforced by `ruff` (config in `pyproject.toml`); run `make format` before pushin
 Install the pre-commit hooks so this is automatic:
 
 ```bash
+make install-dev
 pre-commit install
 ```
+
+Runtime and development dependencies are fully and separately locked. Change exact
+direct pins in `requirements-runtime.in` or `requirements-dev.in`, then run `make lock`.
+Never hand-edit the generated `requirements.txt` or `requirements-dev.txt`. Before
+pushing, run both `make lint` and `make security`.
 
 ---
 

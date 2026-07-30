@@ -12,15 +12,27 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
+from wind_turbine_pm.anomaly.config import load_anomaly_config
+from wind_turbine_pm.anomaly.persistence import bundle_available as anomaly_bundle_available
 from wind_turbine_pm.api.dependencies import provide_service
 from wind_turbine_pm.api.main import app
 from wind_turbine_pm.config import Config, load_config
+from wind_turbine_pm.health.persistence import health_bundle_available
 from wind_turbine_pm.models.persistence import bundle_available
 from wind_turbine_pm.services.failure_prediction_service import FailurePredictionService
 
 needs_artifacts = pytest.mark.skipif(
     not bundle_available(load_config()),
     reason="Model artifacts not built; run python scripts/run_failure_pipeline.py",
+)
+_stage3_config = load_anomaly_config()
+needs_all_artifacts = pytest.mark.skipif(
+    not (
+        bundle_available(_stage3_config)
+        and health_bundle_available(_stage3_config)
+        and anomaly_bundle_available(_stage3_config)
+    ),
+    reason="All model artifacts are required; run python scripts/run_all_pipelines.py",
 )
 
 
@@ -118,23 +130,21 @@ def test_openapi_schema_is_generated(client):
         assert endpoint in paths
 
 
-def test_root_lists_modules_and_roadmap(client):
-    """The root endpoint must advertise built and planned modules.
-
-    Turbine Health Monitoring moved from ``planned_modules`` to ``modules`` when
-    it was implemented; the remaining two modules are still ahead.
-    """
+def test_root_lists_all_modules_without_stale_roadmap_entries(client):
+    """The root endpoint must advertise all four mounted modules."""
     body = client.get("/").json()
     assert body["modules"][0]["module"] == "failure_prediction"
     mounted = {m["module"] for m in body["modules"]}
     planned = {m["module"] for m in body["planned_modules"]}
     assert "turbine_health_monitoring" in mounted
-    assert "anomaly_detection" in planned
+    assert "anomaly_detection" in mounted
+    assert "unified_maintenance_decision" in mounted
+    assert not planned
     assert not (mounted & planned), "a module cannot be both mounted and planned"
     assert body["advisory_only"] is True
 
 
-@needs_artifacts
+@needs_all_artifacts
 def test_health_reports_ok(client):
     """With artifacts present health must be 'ok'."""
     body = client.get("/health").json()

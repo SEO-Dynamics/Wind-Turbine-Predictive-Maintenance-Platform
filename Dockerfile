@@ -1,19 +1,36 @@
 # syntax=docker/dockerfile:1
 # ---------------------------------------------------------------------------
-# Single image serving both the API and the dashboard. Which one runs is chosen
-# by the compose command, so both services share one build and one artifact set.
+# One hardened image serves the API, dashboard, and opt-in training pipeline.
 #
-# The Python version and the pinned requirements deliberately match the
-# environment that trains the model. A serialised scikit-learn estimator is only
-# guaranteed to load under the version that wrote it, and compose mounts the
-# host's artifacts/ into the container - so a mismatched image would unpickle a
-# model built by a different scikit-learn.
-#
-# The image never trains a model. Artifacts are mounted in at runtime (see
-# docker-compose.yml); a container started without them still boots and reports
-# `degraded` on /health with the command needed to build them.
+# Native build tools live only in the builder stage. The final runtime contains
+# the hashed runtime lock, application wheel, and no compiler, curl, or test
+# tooling. Model artifacts and generated data remain external volume mounts.
 # ---------------------------------------------------------------------------
-FROM python:3.13-slim AS base
+FROM python:3.13-slim AS builder
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /build
+
+# A source build is only a fallback when a dependency has no compatible wheel.
+# None of these packages are copied into the final runtime image.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt ./
+RUN python -m pip wheel \
+    --require-hashes \
+    --wheel-dir /wheels \
+    --requirement requirements.txt
+
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+RUN python -m pip wheel --no-deps --wheel-dir /wheels .
+
+
+FROM python:3.13-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -23,36 +40,42 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Build tooling needed by numpy/scipy/shap wheels on slim, plus curl for the
-# container health checks.
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y build-essential curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Dependencies first, so application edits do not invalidate the wheel cache.
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --from=builder /wheels /wheels
+RUN python -m pip install \
+        --no-index \
+        --find-links=/wheels \
+        --require-hashes \
+        --requirement requirements.txt \
+    && python -m pip install \
+        --no-index \
+        --find-links=/wheels \
+        --no-deps \
+        wind-turbine-pm \
+    && rm -rf /wheels
 
-# Application source.
-COPY pyproject.toml README.md ./
-COPY src/ ./src/
+# Runtime application files. The Python package itself is installed from the
+# wheel built above; source and test tooling are not copied into this stage.
 COPY configs/ ./configs/
 COPY scripts/ ./scripts/
 COPY dashboard/ ./dashboard/
 COPY .streamlit/ ./.streamlit/
 
-RUN pip install --no-cache-dir --no-deps -e .
-
-# Artifact and data directories exist even when nothing is mounted, so the
-# services degrade gracefully instead of crashing on a missing path.
+# Services only read these paths. The opt-in pipeline replaces them with
+# writable host mounts when it is explicitly invoked.
 RUN mkdir -p data/raw data/interim data/processed data/samples \
-             artifacts/models artifacts/metrics artifacts/figures artifacts/metadata
+             artifacts/models artifacts/metrics artifacts/figures artifacts/metadata \
+    && groupadd --gid 1000 appuser \
+    && useradd --create-home --uid 1000 --gid 1000 appuser \
+    && chown -R appuser:appuser /app /home/appuser
 
-# Run as a non-root user.
-RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000 8501
 
-# Default target is the API; compose overrides this for the dashboard.
+# Compose supplies service-specific checks. This default protects direct
+# `docker run` usage without adding curl to the runtime image.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).read()"]
+
 CMD ["uvicorn", "wind_turbine_pm.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

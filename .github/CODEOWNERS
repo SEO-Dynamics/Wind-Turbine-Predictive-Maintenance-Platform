@@ -44,3 +44,26 @@
 
 # Handoff contract - now covers both modules.
 /docs/OZAN_HANDOFF.md               @onurozansunger @SBRKBNL
+
+# ---------------------------------------------------------------------------
+# Anomaly Detection & Maintenance Decision Support (Stage 3).
+# ---------------------------------------------------------------------------
+/src/wind_turbine_pm/anomaly/                              @emirsseven
+/src/wind_turbine_pm/services/anomaly_detection_service.py @emirsseven
+/src/wind_turbine_pm/services/maintenance_service.py       @emirsseven
+/src/wind_turbine_pm/api/routers/anomaly.py                @emirsseven
+/src/wind_turbine_pm/api/routers/maintenance.py            @emirsseven
+/dashboard/pages/anomaly_maintenance.py                    @emirsseven
+/configs/anomaly_model.yaml                                @emirsseven
+/configs/maintenance.yaml                                  @emirsseven
+/scripts/prepare_anomaly_data.py                           @emirsseven
+/scripts/train_anomaly_model.py                            @emirsseven
+/scripts/run_anomaly_pipeline.py                           @emirsseven
+/scripts/run_all_pipelines.py                              @emirsseven
+/docs/MODEL_CARD_ANOMALY.md                                @emirsseven
+
+# Stage 3 output contracts are shared by all downstream callers.
+/src/wind_turbine_pm/contracts/anomaly.py      @onurozansunger @SBRKBNL @emirsseven
+/src/wind_turbine_pm/contracts/maintenance.py  @onurozansunger @SBRKBNL @emirsseven
+/src/wind_turbine_pm/api/main.py               @onurozansunger @SBRKBNL @emirsseven
+/docs/OZAN_HANDOFF.md                          @onurozansunger @SBRKBNL @emirsseven

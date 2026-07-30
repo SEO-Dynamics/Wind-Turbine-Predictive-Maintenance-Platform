@@ -8,9 +8,9 @@ module does not read artifacts and never triggers training, so the API starts
 cleanly even when a model has not been built yet - ``/health`` then reports
 ``degraded`` with the command to fix it.
 
-The two modules are independent: the Failure Prediction artifacts being absent
-does not stop the health endpoints from working, or the reverse.  Each router
-depends only on its own ready-service provider.
+Model modules are independent: one artifact set being absent does not stop the
+other model endpoints. The maintenance router is the exception by design: it
+continues with partial evidence and rejects only when every model is unavailable.
 """
 
 from __future__ import annotations
@@ -20,6 +20,13 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, status
 
 from wind_turbine_pm.config import Config, get_config
+from wind_turbine_pm.services.anomaly_detection_service import (
+    PIPELINE_COMMAND as ANOMALY_PIPELINE_COMMAND,
+)
+from wind_turbine_pm.services.anomaly_detection_service import (
+    AnomalyDetectionService,
+    get_anomaly_service,
+)
 from wind_turbine_pm.services.failure_prediction_service import (
     FailurePredictionService,
     ServiceNotReadyError,
@@ -29,6 +36,10 @@ from wind_turbine_pm.services.health_monitoring_service import (
     HEALTH_PIPELINE_COMMAND,
     HealthMonitoringService,
     get_health_service,
+)
+from wind_turbine_pm.services.maintenance_service import (
+    MaintenanceDecisionService,
+    get_maintenance_service,
 )
 
 
@@ -146,8 +157,67 @@ def provide_ready_health_service(
     return service
 
 
+def provide_anomaly_service() -> AnomalyDetectionService:
+    """Provide anomaly detection without asserting artifact readiness."""
+    return get_anomaly_service()
+
+
+def provide_ready_anomaly_service(
+    service: Annotated[AnomalyDetectionService, Depends(provide_anomaly_service)],
+) -> AnomalyDetectionService:
+    """Reject anomaly-only requests until anomaly artifacts are available."""
+    if not service.is_ready:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "error": "anomaly_model_unavailable",
+                "detail": service.status().detail,
+                "hint": ANOMALY_PIPELINE_COMMAND,
+            },
+        )
+    try:
+        _ = service.metadata
+    except ServiceNotReadyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "error": "anomaly_model_unavailable",
+                "detail": str(exc),
+                "hint": exc.hint,
+            },
+        ) from exc
+    return service
+
+
+def provide_maintenance_service() -> MaintenanceDecisionService:
+    """Provide the shared unified decision service."""
+    return get_maintenance_service()
+
+
+def provide_ready_maintenance_service(
+    service: Annotated[MaintenanceDecisionService, Depends(provide_maintenance_service)],
+) -> MaintenanceDecisionService:
+    """Require at least one component model while permitting partial coverage."""
+    if not bool(service.status()["model_loaded"]):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "error": "all_models_unavailable",
+                "detail": "No component model is available for maintenance assessment.",
+                "hint": "python scripts/run_all_pipelines.py",
+            },
+        )
+    return service
+
+
 ConfigDep = Annotated[Config, Depends(provide_config)]
 ServiceDep = Annotated[FailurePredictionService, Depends(provide_service)]
 ReadyServiceDep = Annotated[FailurePredictionService, Depends(provide_ready_service)]
 HealthServiceDep = Annotated[HealthMonitoringService, Depends(provide_health_service)]
 ReadyHealthServiceDep = Annotated[HealthMonitoringService, Depends(provide_ready_health_service)]
+AnomalyServiceDep = Annotated[AnomalyDetectionService, Depends(provide_anomaly_service)]
+ReadyAnomalyServiceDep = Annotated[AnomalyDetectionService, Depends(provide_ready_anomaly_service)]
+MaintenanceServiceDep = Annotated[MaintenanceDecisionService, Depends(provide_maintenance_service)]
+ReadyMaintenanceServiceDep = Annotated[
+    MaintenanceDecisionService, Depends(provide_ready_maintenance_service)
+]

@@ -5,10 +5,10 @@
 # environments without `make`. Run `make help` for the list.
 # ---------------------------------------------------------------------------
 .DEFAULT_GOAL := help
-.PHONY: help install install-dev data prepare train evaluate pipeline test test-fast \
-        lint format typecheck api dashboard docs-figures docker-build docker-up docker-down \
+.PHONY: help lock install install-dev data prepare train evaluate pipeline test test-fast \
+        lint format security api dashboard docs-figures docker-build docker-up docker-down \
         clean clean-all prepare-health train-health health-pipeline health-pipeline-force \
-        pipeline-all
+        prepare-anomaly train-anomaly anomaly-pipeline anomaly-pipeline-force pipeline-all
 
 PYTHON ?= python
 PIP    ?= $(PYTHON) -m pip
@@ -20,13 +20,22 @@ help:  ## Show this help
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 # --- Setup -----------------------------------------------------------------
+lock:  ## Regenerate hashed runtime and development dependency locks
+	uv pip compile requirements-runtime.in --universal --python-version 3.12 \
+		--generate-hashes --custom-compile-command "make lock" --output-file requirements.txt
+	uv pip compile requirements-dev.in --universal --python-version 3.12 \
+		--generate-hashes --custom-compile-command "make lock" --output-file requirements-dev.txt
+
 install:  ## Install the package and its pinned runtime dependencies
 	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements.txt
+	$(PIP) install --require-hashes -r requirements.txt
 	# --no-deps keeps the pinned versions in requirements.txt authoritative.
 	$(PIP) install -e . --no-deps
 
-install-dev: install  ## Install development extras (pre-commit; test tools are pinned already)
+install-dev:  ## Install the package and its pinned development dependencies
+	$(PIP) install --upgrade pip
+	$(PIP) install --require-hashes -r requirements-dev.txt
+	$(PIP) install -e . --no-deps
 	-pre-commit install
 
 # --- Pipeline --------------------------------------------------------------
@@ -50,7 +59,7 @@ pipeline-force:  ## Rebuild everything from scratch, ignoring caches
 
 # --- Turbine Health Monitoring ---------------------------------------------
 # The health module reuses the same raw dataset, so `health-pipeline` does not
-# regenerate it unless --force is passed. That is deliberate: both modules must
+# regenerate it unless --force is passed. That is deliberate: all modules must
 # describe the same fleet.
 prepare-health:  ## Validate, label and feature-engineer the health dataset
 	$(PYTHON) scripts/prepare_health_data.py
@@ -64,9 +73,21 @@ health-pipeline:  ## Run the health pipeline end to end (prepare -> train)
 health-pipeline-force:  ## Rebuild the health data and model from scratch
 	$(PYTHON) scripts/run_health_pipeline.py --force
 
-pipeline-all:  ## Run both module pipelines against one shared dataset
-	$(PYTHON) scripts/run_failure_pipeline.py
-	$(PYTHON) scripts/run_health_pipeline.py
+# --- Anomaly Detection and Maintenance Decision Support --------------------
+prepare-anomaly:  ## Prepare healthy-reference anomaly features
+	$(PYTHON) scripts/prepare_anomaly_data.py
+
+train-anomaly:  ## Compare, calibrate and publish anomaly candidates
+	$(PYTHON) scripts/train_anomaly_model.py
+
+anomaly-pipeline:  ## Run anomaly preparation and training
+	$(PYTHON) scripts/run_anomaly_pipeline.py
+
+anomaly-pipeline-force:  ## Rebuild anomaly artifacts from a regenerated fleet
+	$(PYTHON) scripts/run_anomaly_pipeline.py --force
+
+pipeline-all:  ## Run failure -> health -> anomaly against one shared dataset
+	$(PYTHON) scripts/run_all_pipelines.py
 
 # --- Quality ---------------------------------------------------------------
 test:  ## Run the full test suite
@@ -77,6 +98,10 @@ test-fast:  ## Run the test suite, skipping slow tests
 
 lint:  ## Lint with ruff
 	$(PYTHON) -m ruff check .
+
+security:  ## Audit runtime dependencies and statically scan Python sources
+	$(PYTHON) -m pip_audit --disable-pip --no-deps -r requirements.txt
+	$(PYTHON) -m bandit -q -r src scripts dashboard
 
 format:  ## Auto-format and auto-fix with ruff
 	$(PYTHON) -m ruff format .

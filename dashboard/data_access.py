@@ -15,7 +15,16 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from wind_turbine_pm.anomaly.config import load_anomaly_config
+from wind_turbine_pm.anomaly.persistence import (
+    dataset_path as anomaly_dataset_path,
+)
+from wind_turbine_pm.anomaly.persistence import (
+    features_path as anomaly_features_path,
+)
+from wind_turbine_pm.anomaly.persistence import try_load_metrics as try_load_anomaly_metrics
 from wind_turbine_pm.config import Config, load_config
+from wind_turbine_pm.contracts.observations import frame_to_windows
 from wind_turbine_pm.data.preprocessing import preprocess
 from wind_turbine_pm.health.config import load_health_config
 from wind_turbine_pm.health.persistence import (
@@ -24,8 +33,10 @@ from wind_turbine_pm.health.persistence import (
     try_load_health_metrics,
 )
 from wind_turbine_pm.models.persistence import figures_dir, try_load_metrics
+from wind_turbine_pm.services.anomaly_detection_service import AnomalyDetectionService
 from wind_turbine_pm.services.failure_prediction_service import FailurePredictionService
 from wind_turbine_pm.services.health_monitoring_service import HealthMonitoringService
+from wind_turbine_pm.services.maintenance_service import MaintenanceDecisionService
 from wind_turbine_pm.utils.io import ArtifactNotFoundError, read_table
 from wind_turbine_pm.utils.paths import resolve
 
@@ -34,6 +45,8 @@ PREPARE_COMMAND = "python scripts/prepare_data.py"
 EVALUATE_COMMAND = "python scripts/evaluate_failure_model.py"
 HEALTH_PIPELINE_COMMAND = "python scripts/run_health_pipeline.py"
 HEALTH_PREPARE_COMMAND = "python scripts/prepare_health_data.py"
+ANOMALY_PIPELINE_COMMAND = "python scripts/run_anomaly_pipeline.py"
+ANOMALY_PREPARE_COMMAND = "python scripts/prepare_anomaly_data.py"
 
 
 @st.cache_resource(show_spinner=False)
@@ -312,3 +325,97 @@ def latest_per_turbine(scored: pd.DataFrame, as_of: pd.Timestamp | None = None) 
         return frame
     latest = frame.sort_values("timestamp").groupby("turbine_id", as_index=False).tail(1)
     return latest.sort_values("failure_probability", ascending=False)
+
+
+# ---------------------------------------------------------------------------
+# Anomaly Detection and Maintenance Decision Support
+# ---------------------------------------------------------------------------
+@st.cache_resource(show_spinner=False)
+def get_anomaly_config_cached() -> Config:
+    """Load all three model namespaces and the maintenance policy."""
+    return load_anomaly_config()
+
+
+@st.cache_resource(show_spinner="Loading anomaly model artifacts...")
+def get_anomaly_service_cached() -> AnomalyDetectionService:
+    """Build the anomaly service used by both dashboard and API."""
+    return AnomalyDetectionService(get_anomaly_config_cached())
+
+
+@st.cache_resource(show_spinner="Loading unified maintenance services...")
+def get_maintenance_service_cached() -> MaintenanceDecisionService:
+    """Compose the three source services using the Stage 3 configuration."""
+    cfg = get_anomaly_config_cached()
+    return MaintenanceDecisionService(
+        cfg,
+        failure=FailurePredictionService(cfg),
+        health=HealthMonitoringService(cfg),
+        anomaly=get_anomaly_service_cached(),
+    )
+
+
+@st.cache_data(show_spinner="Loading anomaly dataset...")
+def load_anomaly_dataset() -> pd.DataFrame | None:
+    """Load row-aligned anomaly preparation output."""
+    try:
+        return read_table(
+            anomaly_dataset_path(get_anomaly_config_cached()),
+            hint=ANOMALY_PREPARE_COMMAND,
+        )
+    except ArtifactNotFoundError:
+        return None
+
+
+@st.cache_data(show_spinner="Loading anomaly features...")
+def load_anomaly_features() -> pd.DataFrame | None:
+    """Load the anomaly feature matrix in published model order."""
+    try:
+        return read_table(
+            anomaly_features_path(get_anomaly_config_cached()),
+            hint=ANOMALY_PREPARE_COMMAND,
+        )
+    except ArtifactNotFoundError:
+        return None
+
+
+@st.cache_data(show_spinner=False)
+def load_anomaly_metrics() -> dict[str, Any] | None:
+    """Load calibration, comparison and held-out metrics."""
+    return try_load_anomaly_metrics(get_anomaly_config_cached())
+
+
+@st.cache_data(show_spinner="Scoring fleet anomalies...")
+def score_anomaly(split: str = "test") -> pd.DataFrame | None:
+    """Score one prepared split through the production anomaly service."""
+    dataset, features = load_anomaly_dataset(), load_anomaly_features()
+    service = get_anomaly_service_cached()
+    if dataset is None or features is None or not service.is_ready:
+        return None
+    subset = dataset.loc[dataset["split"] == split]
+    if subset.empty:
+        return None
+    scored = service.score_frame(subset, features.loc[subset.index])
+    carried = [
+        column
+        for column in ("anomaly_truth", "degradation_level", "operational_status")
+        if column in subset
+    ]
+    return scored.join(subset[carried]).reset_index(drop=True)
+
+
+@st.cache_data(show_spinner="Building fleet maintenance priority queue...")
+def assess_maintenance_fleet() -> list[dict[str, Any]] | None:
+    """Assess the latest 97-hour window for every turbine with available models."""
+    dataset = load_anomaly_dataset()
+    service = get_maintenance_service_cached()
+    if dataset is None or not bool(service.status()["model_loaded"]):
+        return None
+    windows = []
+    for _, group in dataset.groupby("turbine_id", sort=True):
+        windows.extend(frame_to_windows(group.sort_values("timestamp").tail(97)))
+    if not windows:
+        return None
+    return [
+        assessment.model_dump(mode="json")
+        for assessment in service.assess_batch(windows).assessments
+    ]

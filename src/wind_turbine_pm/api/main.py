@@ -1,8 +1,7 @@
 """FastAPI application for the Wind Turbine Predictive Maintenance Platform.
 
-The Failure Prediction and Turbine Health Monitoring modules are mounted today.
-Future modules register themselves in :data:`MODULE_ROUTERS` - see
-``docs/OZAN_HANDOFF.md``.
+Failure prediction, health monitoring, anomaly detection and unified
+maintenance decision support register through :data:`MODULE_ROUTERS`.
 
 Importing this module must stay free of side effects: it does not load model
 artifacts and never trains.  Artifacts are loaded lazily on the first request
@@ -22,8 +21,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from wind_turbine_pm import __version__
-from wind_turbine_pm.api.dependencies import HealthServiceDep, ServiceDep
-from wind_turbine_pm.api.routers import failure, health_monitoring
+from wind_turbine_pm.api.dependencies import (
+    AnomalyServiceDep,
+    HealthServiceDep,
+    MaintenanceServiceDep,
+    ServiceDep,
+)
+from wind_turbine_pm.api.routers import anomaly, failure, health_monitoring, maintenance
 from wind_turbine_pm.api.schemas import HealthResponse
 from wind_turbine_pm.config import get_config
 from wind_turbine_pm.logging_config import configure_from_config, get_logger
@@ -36,6 +40,8 @@ logger = get_logger(__name__)
 MODULE_ROUTERS: list[tuple[APIRouter, Callable[[], dict[str, Any]]]] = [
     (failure.router, failure.router_description),
     (health_monitoring.router, health_monitoring.router_description),
+    (anomaly.router, anomaly.router_description),
+    (maintenance.router, maintenance.router_description),
 ]
 
 DESCRIPTION = """
@@ -62,10 +68,19 @@ named components, and reports sensor drift and operating-envelope violations.
 * `GET /health-monitoring/sensor-rules` - the operating-envelope rules, with the
   provenance of every limit.
 
-The two modules answer different questions and are deliberately independent:
+Failure and health answer different questions and are deliberately independent:
 failure prediction asks *"is something about to break?"*, health monitoring asks
 *"what condition is this machine in, and is it getting worse?"*. Either can serve
 while the other's artifacts are missing; `GET /health` reports both.
+
+**Anomaly Detection Module** - compares current behaviour with a healthy
+training reference, calibrates novelty to a common percentile score, and
+reports warning/alarm severity with associated signal deviations.
+
+**Maintenance Decision Support** - retains the three source assessments,
+combines their normalized risks with 50/30/20 failure/anomaly/health weights,
+applies explicit safety guardrails, and returns a deterministic advisory action.
+It continues with partial evidence and exposes coverage and missing modules.
 
 **All output is advisory.** It is decision support for qualified maintenance
 staff. It is not a certified industrial safety system, is not a substitute for
@@ -87,7 +102,7 @@ def create_app() -> FastAPI:
         title="Wind Turbine Predictive Maintenance API",
         description=DESCRIPTION,
         version=__version__,
-        contact={"name": "Failure Prediction Module"},
+        contact={"name": "Wind Turbine PM contributors"},
         license_info={"name": "MIT"},
         openapi_tags=[
             {"name": "system", "description": "Health and platform information."},
@@ -102,6 +117,14 @@ def create_app() -> FastAPI:
                     "drift detection."
                 ),
             },
+            {
+                "name": "anomaly-detection",
+                "description": "Healthy-reference novelty scoring and calibrated alerts.",
+            },
+            {
+                "name": "maintenance-decision-support",
+                "description": "Unified evidence, guardrails and deterministic advisory actions.",
+            },
         ],
     )
 
@@ -111,7 +134,12 @@ def create_app() -> FastAPI:
         tags=["system"],
         summary="Liveness and per-module model status",
     )
-    def health(service: ServiceDep, health_service: HealthServiceDep) -> HealthResponse:
+    def health(
+        service: ServiceDep,
+        health_service: HealthServiceDep,
+        anomaly_service: AnomalyServiceDep,
+        maintenance_service: MaintenanceServiceDep,
+    ) -> HealthResponse:
         """Report API liveness and each module's artifact availability.
 
         Returns ``200`` in every case; ``status`` distinguishes a fully working
@@ -122,15 +150,21 @@ def create_app() -> FastAPI:
         Args:
             service: The shared failure-prediction service.
             health_service: The shared health-monitoring service.
+            anomaly_service: The shared anomaly-detection service.
+            maintenance_service: The unified decision service.
 
         Returns:
             The health document.
         """
         failure_info = service.status()
         health_info = health_service.status()
+        anomaly_info = anomaly_service.status()
+        maintenance_info = maintenance_service.status()
         modules = {
             "failure_prediction": failure_info.to_dict(),
             "turbine_health_monitoring": health_info.to_dict(),
+            "anomaly_detection": anomaly_info.to_dict(),
+            "unified_maintenance_decision": maintenance_info,
         }
         loaded = [name for name, info in modules.items() if info["model_loaded"]]
         missing = [name for name in modules if name not in loaded]
@@ -164,17 +198,14 @@ def create_app() -> FastAPI:
         """List the platform version and the modules currently mounted.
 
         Returns:
-            A descriptor document including the planned future modules.
+            A descriptor document including mounted and planned modules.
         """
         return {
             "platform": "Wind Turbine Predictive Maintenance Platform",
             "version": __version__,
             "docs": "/docs",
             "modules": [describe() for _, describe in MODULE_ROUTERS],
-            "planned_modules": [
-                {"module": "anomaly_detection", "status": "planned"},
-                {"module": "unified_maintenance_decision", "status": "planned"},
-            ],
+            "planned_modules": [],
             "advisory_only": True,
         }
 

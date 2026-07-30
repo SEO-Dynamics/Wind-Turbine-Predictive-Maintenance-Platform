@@ -3,21 +3,20 @@
 [![CI](https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
-[![Tests](https://img.shields.io/badge/tests-390%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-425%20passing-brightgreen.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Data: synthetic](https://img.shields.io/badge/data-synthetic-orange.svg)](#9-synthetic-data-disclosure)
 [![Status: advisory only](https://img.shields.io/badge/status-advisory%20only-red.svg)](#27-limitations)
 
-> **Modules 1 and 2 of 3 — Failure Prediction and Turbine Health Monitoring.** Both are
-> implemented and serve from one API and one dashboard. Anomaly Detection & Maintenance
-> Decision Support is a planned follow-on stage and is **not implemented** — see
-> [the roadmap](#28-future-modules).
+> **Three integrated modules — Failure Prediction, Turbine Health Monitoring, and Anomaly
+> Detection & Maintenance Decision Support.** They share one SCADA contract, API,
+> dashboard and deployment image while retaining separate evidence and artifact readiness.
 
 ---
 
 ## 3. Executive summary
 
-Two modules answer two different questions about the same fleet, from the same SCADA
+Three modules answer complementary questions about the same fleet, from the same SCADA
 history:
 
 * **Failure Prediction** — *"is something about to break?"* Estimates the probability that
@@ -25,11 +24,14 @@ history:
 * **Turbine Health Monitoring** — *"what condition is this machine in, and is it getting
   worse?"* Scores current condition **0-100**, bands it into Healthy / Monitor / Degraded /
   Critical, attributes it to named components, and cross-checks it against sensor drift.
+* **Anomaly & Maintenance** — *"is current behaviour unusual, and what should be reviewed
+  when?"* Calibrates novelty against healthy validation history, preserves all three source
+  assessments, and applies an explicit advisory maintenance policy.
 
 Both are production-shaped rather than notebooks: physics-grounded data generation, a
 validation layer, leakage-safe feature engineering, chronological validation with an
 embargo, compared model families with guard-railed selection, grounded explanations,
-reusable services, one FastAPI backend, one Streamlit dashboard, 390 tests, Docker and CI.
+reusable services, one FastAPI backend, one Streamlit dashboard, 425 tests, Docker and CI.
 
 **Failure Prediction — held-out test data (synthetic):**
 
@@ -112,12 +114,19 @@ three explicit design decisions in this module:
 - Auditable per-component roll-up naming which subsystem is driving the score
 - Reusable `HealthMonitoringService`
 
-**Shared across both:** one FastAPI backend, one Streamlit dashboard, 390 tests, Docker, CI,
-a model card per module and a handoff contract.
+**Anomaly Detection & Maintenance Decision Support — implemented and working:**
 
-**Deliberately out of scope** (Stage 3 — contracts exist, logic does not): unsupervised
-anomaly detection, a unified cross-model risk score, and maintenance prioritisation across
-models.
+- Healthy-only reference training with Isolation Forest, LOF (`novelty=True`) and One-Class
+  SVM compared on one validation split
+- Leakage-safe 72-hour features: rolling, trend, physical residual and regime-conditioned
+  deviations, with synthetic truth/event columns structurally excluded
+- Empirical healthy-validation percentile calibration: 5% warning and 1% alarm targets
+- Unified 50/30/20 failure/anomaly/health risk with normalized partial coverage
+- Explicit guardrails and deterministic routine / 7-day / 48-hour / same-shift actions
+- Reusable `AnomalyDetectionService` and `MaintenanceDecisionService`
+
+**Shared across all three:** one FastAPI backend, one Streamlit dashboard, Docker, CI,
+module model cards and a handoff contract.
 
 ---
 
@@ -141,8 +150,8 @@ models.
 
 ## 7. System architecture
 
-Both modules share the ingestion, validation and cleaning layers and the same raw dataset,
-then diverge into their own feature pipeline, model and service.
+All modules share ingestion, validation, cleaning, operating regimes, temporal split
+boundaries and one raw dataset, then retain their own features, artifacts and services.
 
 ```mermaid
 flowchart TD
@@ -170,32 +179,38 @@ flowchart TD
         V --> W["HealthMonitoringService"]
     end
 
-    C --> D
-    C --> P
-    J --> K["FastAPI<br/>/failure · /health-monitoring"]
-    W --> K
-    J --> L["Streamlit dashboard<br/>two pages"]
-    W --> L
-
-    subgraph FUTURE ["Stage 3 — NOT IMPLEMENTED"]
+    subgraph ANOMALY ["Anomaly Detection Module"]
         direction TB
-        N["Anomaly Detection Module<br/>unsupervised detection"]
-        O["Unified Maintenance Decision<br/>combined risk · prioritisation"]
+        N["Healthy train reference<br/>valid rows outside fault / maintenance"] --> O["Leakage-safe features<br/>≤72 h rolling · trend · physical residual · regime deviation"]
+        O --> X["IF · LOF novelty · One-Class SVM"]
+        X --> Y["Empirical healthy-validation calibration<br/>5% warning · 1% alarm"]
+        Y --> Z["Artifacts<br/>anomaly_*"]
+        Z --> AA["AnomalyDetectionService"]
     end
 
-    C -.->|"shared observation contract"| N
-    J -.->|"failure probability"| O
-    W -.->|"health assessment + components"| O
-    N -.-> O
+    C --> D
+    C --> P
+    C --> N
+    J --> AB["MaintenanceDecisionService<br/>50/30/20 · coverage · guardrails · actions"]
+    W --> AB
+    AA --> AB
+    J --> K["FastAPI<br/>/failure · /health-monitoring · /anomaly · /maintenance"]
+    W --> K
+    AA --> K
+    AB --> K
+    J --> L["Streamlit dashboard<br/>three pages"]
+    W --> L
+    AA --> L
+    AB --> L
 
-    style FUTURE fill:#f5f5f5,stroke:#999,stroke-dasharray: 6 4
     style FAILURE fill:#eef5fc,stroke:#2b6cb0
     style HEALTH fill:#eefaf2,stroke:#2f855a
+    style ANOMALY fill:#fff7ed,stroke:#c05621
 ```
 
-Dashed edges are **extension points**, not existing code. See
-[`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) for how to attach a module to each, and §12
-of that document for the health contract Stage 3 can consume.
+The unified service composes public model outputs rather than reaching into estimators.
+Missing modules retain their absence through `coverage` and `missing_modules`; they are
+never silently replaced with zero risk.
 
 ---
 
@@ -838,9 +853,63 @@ instrument-fault detector.
 make health-pipeline      # prepare + train, ~1 min once the raw data exists
 ```
 
-The health pipeline deliberately **does not** regenerate the raw dataset. Both modules read
-the same file, which is what makes their outputs comparable; `make pipeline-all` runs both
-in order against one dataset.
+The health pipeline deliberately **does not** regenerate the raw dataset. All modules read
+the same file, which is what makes their outputs comparable; `make pipeline-all` runs them
+in failure → health → anomaly order against one dataset.
+
+---
+
+## 21.5 Anomaly Detection & Maintenance Decision Support
+
+Anomaly detection is trained only on valid, healthy train rows outside known
+`fault`/`maintenance` controller states. The offline evaluation label is
+`degradation_level >= 0.20`; it is evaluation truth only and never enters the feature
+matrix. `failure_event`, `maintenance_event`, `failure_mode`, `episode_id` and related
+synthetic truth columns are excluded as well.
+
+Isolation Forest, LOF in novelty mode and One-Class SVM fit the same deterministic,
+turbine/regime-balanced healthy reference. Raw decision scores are oriented so higher
+always means more unusual, then mapped through the empirical CDF of healthy validation
+scores. This makes the selected model's output a comparable `[0,1]` novelty percentile
+rather than an algorithm-specific margin.
+
+On the current synthetic run, **Local Outlier Factor** was selected on validation recall:
+
+| Split | PR-AUC | Recall | Precision | F2 |
+|---|---:|---:|---:|---:|
+| Validation | 0.725 | 0.693 | 0.657 | 0.685 |
+| Test (scored once) | 0.794 | 0.826 | 0.574 | 0.759 |
+
+The calibration artifact measured a **5.000% warning** and **1.003% alarm** rate on its
+healthy validation reference. These numbers describe synthetic data, not validated
+real-fleet performance.
+
+The unified risk service preserves the complete failure, health and anomaly assessments
+and computes:
+
+```text
+failure risk = failure_probability
+anomaly risk = calibrated anomaly_score
+health risk  = 1 - health_score / 100
+unified risk = 50% failure + 30% anomaly + 20% health
+```
+
+When an artifact is missing, available weights are normalized and the original evidence
+coverage is returned. A failure-positive, Critical health class or anomaly alarm floors the
+risk at High; Monitor/Degraded health or an anomaly warning floors it at Medium. Sensor
+drift and low data quality lower `decision_confidence` only—they do not manufacture machine
+severity.
+
+| Action | Trigger summary | Recommended window |
+|---|---|---:|
+| `routine_monitoring` | Low risk, no guardrail | Normal cadence |
+| `plan_inspection` | Medium risk | 7 days |
+| `urgent_review` | One serious signal / High risk | 48 hours |
+| `immediate_engineering_review` | Controller fault or at least two serious signals | Same shift (8 hours) |
+
+Every action remains advisory; the service does not stop, derate or create a work order.
+Run this module alone with `make anomaly-pipeline`, or all modules with
+`make pipeline-all`.
 
 ---
 
@@ -867,6 +936,16 @@ reports `degraded` on `/health`.
 | `GET` | `/health-monitoring/example` | Ready-to-post example body |
 | `POST` | `/health-monitoring/assess` | Assess one turbine from a raw observation window |
 | `POST` | `/health-monitoring/assess/batch` | Batch of windows (≤200 turbines) |
+| `GET` | `/anomaly/model-info` | Selected novelty model and calibrated thresholds |
+| `GET` | `/anomaly/metrics` | Candidate comparison, held-out metrics, measured healthy alert rates |
+| `GET` | `/anomaly/features` | Exact feature order and forbidden truth columns |
+| `GET` | `/anomaly/example` | Ready-to-post example body |
+| `POST` | `/anomaly/detect` | Calibrated anomaly assessment for one raw window |
+| `POST` | `/anomaly/detect/batch` | Batch anomaly assessment |
+| `GET` | `/maintenance/policy` | Weights, guardrails and action windows |
+| `GET` | `/maintenance/example` | Shared raw-window example |
+| `POST` | `/maintenance/assess` | Unified evidence and deterministic action |
+| `POST` | `/maintenance/assess/batch` | Fleet queue ordered by maintenance priority |
 
 The health prefix is `/health-monitoring`, **not** `/health`: that path is the platform
 liveness probe used by the Docker health check and by CI, so a module must not take it.
@@ -878,14 +957,17 @@ liveness probe used by the Docker health check and by CI, so a module must not t
   "status": "ok",
   "modules": {
     "failure_prediction":        {"model_loaded": true,  "n_features": 395, "...": "..."},
-    "turbine_health_monitoring": {"model_loaded": true,  "n_features": 239, "...": "..."}
+    "turbine_health_monitoring": {"model_loaded": true,  "n_features": 239, "...": "..."},
+    "anomaly_detection":         {"model_loaded": true,  "n_features": 130, "...": "..."},
+    "unified_maintenance_decision": {"model_loaded": true, "coverage": 1.0, "...": "..."}
   }
 }
 ```
 
-The modules are independent: one having no artifacts does not stop the other from serving,
-and a CI step asserts exactly that. `status` is `ok` only when every mounted module is
-loaded, so `degraded` always means "look at `modules` to see which".
+The model modules are independent. Maintenance continues with available evidence, reports
+normalized `coverage`, lowers confidence and lists missing pipeline commands; it returns
+`503` only when no component model is ready. `status` is `ok` only when every mounted model
+is loaded, so `degraded` always means "look at `modules` to see which".
 
 There is deliberately **no** `/health-monitoring/assess/prepared`. Unlike a failure
 probability, an assessment reports component scores and rule violations computed from *raw*
@@ -938,8 +1020,7 @@ assessment — and returning a silently partial one would be worse than not offe
 
 ## 23. Dashboard
 
-Streamlit, at `http://localhost:8501`. Navigation lists the two built modules and the
-planned one, clearly marked.
+Streamlit, at `http://localhost:8501`. Navigation exposes all three working module pages.
 
 ### Failure Prediction page
 
@@ -987,8 +1068,19 @@ the service exposes `assess_from_prepared` alongside the window-based path, and 
 the agreement.
 
 **The dashboard does not crash on missing artifacts.** Every section degrades to a
-message plus the exact command needed. Neither page duplicates logic — they call the same
-`FailurePredictionService` and `HealthMonitoringService` the API uses.
+message plus the exact command needed.
+
+### Anomaly & Maintenance page
+
+- **Fleet priority queue** — action, time window, risk, coverage, confidence and missing
+  evidence, ordered by the deterministic policy.
+- **Turbine detail** — anomaly percentile and degradation trend, plus failure, anomaly and
+  health risk kept as three separate rows.
+- **Decision support** — selected action, target components and the exact guardrail reasons.
+- **Model evidence** — three candidate models, validation selection and measured 5%/1%
+  healthy-reference calibration.
+
+No dashboard page duplicates prediction logic: each calls the same service used by the API.
 
 ---
 
@@ -996,15 +1088,15 @@ message plus the exact command needed. Neither page duplicates logic — they ca
 
 ```
 wind-turbine-predictive-maintenance/
-├── configs/                       # base · data · features · failure_model · health_model (YAML)
+├── configs/                       # base · data · features · failure · health · anomaly · maintenance
 ├── data/{raw,interim,processed,samples}/
 ├── artifacts/{models,metrics,figures,metadata}/
 ├── notebooks/01_failure_prediction_eda.ipynb
 ├── scripts/                       # generate · prepare · train · evaluate · run_pipeline
-│                                  # prepare_health_data · train_health_model · run_health_pipeline
+│                                  # health/anomaly preparation + training · run_all_pipelines
 ├── src/wind_turbine_pm/
 │   ├── config.py  constants.py  logging_config.py
-│   ├── contracts/                 # observations · predictions · metadata · health  ← SHARED
+│   ├── contracts/                 # observations · predictions · health · anomaly · maintenance
 │   ├── data/                      # synthetic · ingestion · validation · preprocessing · splitting
 │   ├── features/                  # failure_features · transformers
 │   ├── models/                    # baselines · training · evaluation · threshold · persistence · prediction
@@ -1012,21 +1104,24 @@ wind-turbine-predictive-maintenance/
 │   ├── health/                    # sensor_rules · regimes · health_features · drift
 │   │                              # health_score · health_class · components
 │   │                              # narratives · evaluation · persistence · config
-│   ├── services/                  # failure_prediction_service · health_monitoring_service
+│   ├── anomaly/                   # features · modeling · calibration · persistence · config
+│   ├── services/                  # failure · health · anomaly · maintenance
 │   │                              #   ← SHARED BY API + DASHBOARD
 │   ├── api/                       # main · dependencies · schemas
-│   │                              # routers/{failure,health_monitoring}
+│   │                              # routers/{failure,health_monitoring,anomaly,maintenance}
 │   └── utils/                     # io · paths · reproducibility
-├── dashboard/{app.py,pages/{failure_prediction,fleet_health},components/,data_access.py}
-├── tests/                         # 390 tests
-└── docs/{OZAN_HANDOFF.md,MODEL_CARD_HEALTH.md}
+├── dashboard/{app.py,pages/{failure_prediction,fleet_health,anomaly_maintenance},...}
+├── tests/
+└── docs/{OZAN_HANDOFF.md,MODEL_CARD_HEALTH.md,MODEL_CARD_ANOMALY.md}
 ```
 
 ---
 
 ## 25. Local installation
 
-Requires **Python 3.12+**.
+Requires **Python 3.12+** on Linux, Windows, or Apple Silicon macOS. Intel macOS
+is excluded from the shared lock because SHAP's platform-specific LLVM cap is
+incompatible with the verified NumPy/Numba artifact runtime.
 
 ```bash
 git clone https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform.git
@@ -1035,7 +1130,8 @@ cd wind-turbine-predictive-maintenance
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-make install                     # or: pip install -r requirements.txt && pip install -e . --no-deps
+make install                     # runtime-only, transitively locked dependencies
+# Contributors: make install-dev
 ```
 
 <details>
@@ -1053,6 +1149,7 @@ export PYTHONPATH=src
 
 ```bash
 make pipeline                    # full run: data → prepare → train → evaluate (~2.5 min)
+make pipeline-all                # failure → health → anomaly on one raw fleet
 ```
 
 Or stage by stage:
@@ -1082,7 +1179,9 @@ make dashboard                   # streamlit run dashboard/app.py
 
 | Target | Direct equivalent |
 |---|---|
-| `make install` | `pip install -r requirements.txt && pip install -e . --no-deps` |
+| `make lock` | regenerate hashed runtime and development dependency locks with `uv` |
+| `make install` | `pip install --require-hashes -r requirements.txt && pip install -e . --no-deps` |
+| `make install-dev` | install `requirements-dev.txt` and the editable package |
 | `make data` | `python scripts/generate_synthetic_data.py` |
 | `make prepare` | `python scripts/prepare_data.py` |
 | `make train` | `python scripts/train_failure_model.py` |
@@ -1091,9 +1190,13 @@ make dashboard                   # streamlit run dashboard/app.py
 | `make prepare-health` | `python scripts/prepare_health_data.py` |
 | `make train-health` | `python scripts/train_health_model.py` |
 | `make health-pipeline` | `python scripts/run_health_pipeline.py` |
-| `make pipeline-all` | both module pipelines, in order, on one shared dataset |
+| `make prepare-anomaly` | `python scripts/prepare_anomaly_data.py` |
+| `make train-anomaly` | `python scripts/train_anomaly_model.py` |
+| `make anomaly-pipeline` | `python scripts/run_anomaly_pipeline.py` |
+| `make pipeline-all` | `python scripts/run_all_pipelines.py` |
 | `make test` | `pytest` |
 | `make lint` | `ruff check .` |
+| `make security` | `pip-audit` the runtime lock and Bandit-scan Python sources |
 | `make format` | `ruff format . && ruff check --fix .` |
 | `make api` | `uvicorn wind_turbine_pm.api.main:app --reload` |
 | `make dashboard` | `streamlit run dashboard/app.py` |
@@ -1105,23 +1208,25 @@ make dashboard                   # streamlit run dashboard/app.py
 ### Testing
 
 ```bash
-make test                        # 390 tests, ~90 s
+make test                        # 425 tests
 ```
 
-Covering, for both modules: synthetic data determinism and physics · validation findings ·
+Covering all modules: synthetic data determinism and physics · validation findings ·
 target correctness and edge cases · feature leakage (turbine and temporal, asserted
 empirically) · split ordering and embargo · training, selection and tie-breaks · threshold
 bounds and risk mapping · sensor-rule consistency and provenance · operating-regime
 precedence · CUSUM boundedness and threshold calibration · class-band boundaries · narrative
-groundedness · service behaviour with and without artifacts · every API endpoint and error
-path.
+groundedness · future-row anomaly leakage · truth-column exclusion · novelty score
+orientation and calibration · unified 50/30/20 math · coverage and guardrail tables · all
+four maintenance actions · service behaviour with and without artifacts · every API
+endpoint and error path.
 
 Several are explicit **regression tests for defects found while building the health
 module** — notably that the drift penalty must not saturate, that the CUSUM statistic must
 stay bounded, and that the bulk and single scoring paths must agree on the same row.
 
-Tests build their own small fixtures and never train a production-scale model. The ~21
-artifact-dependent tests skip when no model has been trained; CI trains both modules and
+Tests build their own small fixtures and never train a production-scale model. Artifact
+integration tests skip when models have not been trained; CI trains all three pipelines and
 then re-runs them, failing if any still skip.
 
 ---
@@ -1133,13 +1238,18 @@ docker compose up --build
 ```
 
 Starts the API (`:8000`) and dashboard (`:8501`) from one image, with container health
-checks. Both come up healthy in a few seconds; the first build takes ~2.5 minutes.
+checks. Host ports bind to `127.0.0.1` by default; set `WTPM_BIND_ADDRESS` explicitly
+only when a reviewed network deployment needs a wider bind. Both services come up
+healthy in a few seconds; the first build takes a few minutes.
 
 | Property | Detail |
 |---|---|
 | Base image | `python:3.13-slim` — **matches the training runtime exactly** |
-| Dependencies | Pinned in `requirements.txt`, so the container's scikit-learn is the one that pickled the model |
+| Dependencies | Every runtime dependency and distribution hash is locked in `requirements.txt`; development tools live in `requirements-dev.txt` |
+| Build isolation | Compilers and headers exist only in the builder stage; the final image has no `curl`, compiler, pytest, Ruff, Bandit, or pip-audit |
 | Artifact mounts | **Read-only** — neither service can train or mutate them (verified: writes fail with `Read-only file system`) |
+| Root filesystem | Read-only for API/dashboard, with bounded tmpfs mounts for required ephemeral writes |
+| Container privileges | All Linux capabilities dropped; `no-new-privileges` enabled |
 | User | Non-root (`appuser`, uid 1000) |
 | Training on startup | Never — artifacts are loaded lazily |
 
@@ -1148,8 +1258,11 @@ checks. Both come up healthy in a few seconds; the first build takes ~2.5 minute
 A serialised scikit-learn estimator is only guaranteed to load under the version that
 wrote it, and compose mounts the host's `artifacts/` into the container. An unpinned
 image would happily unpickle a model built by a different scikit-learn and could
-misbehave silently. So `requirements.txt` pins the scientific stack and the image uses
-the same Python minor version as training. As defence in depth, `load_bundle()` compares
+misbehave silently. Exact direct versions live in `requirements-runtime.in`; `make lock`
+resolves them into the fully transitive, hash-verified `requirements.txt`. Development
+dependencies are independently locked so they are never shipped in the serving image.
+The image uses the same Python minor version as training. As defence in depth,
+`load_bundle()` compares
 the runtime's `scikit-learn`/`numpy`/`joblib` versions against those recorded in the
 model metadata and surfaces any mismatch in the logs and in `GET /health`
 (`runtime_warnings`).
@@ -1165,9 +1278,8 @@ Opt-in, so `docker compose up` never triggers training by accident:
 docker compose --profile pipeline run --rm pipeline
 ```
 
-This mounts `artifacts/` and `data/` writable and runs the full pipeline. **Verified:** it
-reproduces the host-trained model exactly — identical metrics and bitwise-identical
-predictions.
+This mounts `artifacts/` and `data/` writable and runs failure → health → anomaly against
+one raw fleet.
 
 ### If `docker compose` is not found
 
@@ -1180,7 +1292,23 @@ ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugin
 
 ---
 
-## 27. Limitations
+## 27. Security
+
+The repository security policy and private reporting route are documented in
+[`SECURITY.md`](SECURITY.md). The bundled services have no authentication or TLS and
+must not be exposed directly to the internet. The secure local default is intentional;
+production ingress, identity, rate limiting, certificate management, and audit logging
+remain deployment responsibilities outside this synthetic-data reference platform.
+
+Run the source and dependency checks locally with:
+
+```bash
+make security
+```
+
+---
+
+## 28. Limitations
 
 **Read this before drawing any conclusion from the numbers above.**
 
@@ -1244,39 +1372,18 @@ ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugin
 
 ---
 
-## 28. Future modules
+## 28. Development status
 
 | Stage | Module | Scope | Status |
 |---|---|---|---|
 | 1 | **Failure Prediction** | 48-hour failure risk, explanation, advisory output | ✅ **Complete** |
 | 2 | **Turbine Health Monitoring** | Condition scoring, health classification, component roll-up, operating regimes, sensor drift detection | ✅ **Complete** |
-| 3 | Anomaly Detection & Decision Support | Unsupervised anomaly detection, unified risk score, maintenance prioritisation | ⏳ Planned |
+| 3 | **Anomaly Detection & Decision Support** | Healthy-reference novelty, unified evidence, maintenance prioritisation | ✅ **Implemented** |
 
-Stage 3 does not exist yet. Stages 1 and 2 provide contracts and extension points for it
-and should not need restructuring when it arrives.
-
-**Extension points already in place:**
-
-- `contracts/observations.py` — shared `TurbineObservation` / `TurbineWindow` schema
-- `contracts/predictions.py` — `BasePrediction` for any per-turbine model output
-- `contracts/metadata.py` — `ModelMetadata` for any published model
-- `contracts/health.py` — health output schemas, consumable by a unified score
-- `api/main.py` — `MODULE_ROUTERS` list; add a router without touching either module
-- `dashboard/app.py` — `PAGES` list; add a page with one entry
-- `features/transformers.py` — reusable leakage-safe temporal primitives
-- `health/regimes.py` — regime conditioning, which anomaly detection needs too: an anomaly
-  at idle is not the same as one at rated power
-- `health/drift.py` — `DriftCalibration`, the pattern for setting a detector's limits from a
-  healthy reference period instead of a textbook constant. **Read its docstring before
-  choosing control limits for a new detector on this data**
-- `data/validation.py` — reusable validation layer
-- Shared config structure and artifact directories, with per-module namespacing
-
-**Stage 2 is the worked example.** `docs/OZAN_HANDOFF.md` §12 documents its contract,
-including how to combine a health assessment with a failure probability without collapsing
-two genuinely different questions into one number.
-
-See [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) for the full contract documentation.
+The implementation remains intentionally extensible: every model owns a namespaced config
+and prefixed artifacts, all consume `TurbineWindow`, and routers register through
+`MODULE_ROUTERS`. See [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) for the cross-module
+contract and Stage 3 completion notes.
 
 ---
 
@@ -1312,10 +1419,9 @@ contracts the previous one published.
 |---|---|---|
 | 1 | Failure Prediction | [@onurozansunger](https://github.com/onurozansunger) |
 | 2 | Turbine Health Monitoring | [@SBRKBNL](https://github.com/SBRKBNL) |
-| 3 | Anomaly Detection & Decision Support | *open* |
+| 3 | Anomaly Detection & Decision Support | [@emirsseven](https://github.com/emirsseven) |
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to pick up Stage 3, and
-[`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) for the contracts it can build on.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution and ownership rules.
 
 ---
 
@@ -1334,5 +1440,6 @@ Provided as-is, without warranty. Not certified for safety-critical industrial u
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, branching, definition of done, platform non-negotiables |
 | [`MODEL_CARD.md`](MODEL_CARD.md) | Failure Prediction: intended use, out-of-scope use, metrics, risks, oversight, retraining |
 | [`docs/MODEL_CARD_HEALTH.md`](docs/MODEL_CARD_HEALTH.md) | Turbine Health Monitoring: the same, plus the drift-calibration analysis |
-| [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) | Data, feature, artifact and API contracts; extension points; stable files. §12 is the health contract for Stage 3 |
+| [`docs/MODEL_CARD_ANOMALY.md`](docs/MODEL_CARD_ANOMALY.md) | Anomaly model: healthy reference, empirical calibration, results, limitations and oversight |
+| [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) | Data, feature, artifact and API contracts plus Stage 3 completion notes |
 | [`notebooks/01_failure_prediction_eda.ipynb`](notebooks/01_failure_prediction_eda.ipynb) | Exploratory analysis and the leakage discussion |

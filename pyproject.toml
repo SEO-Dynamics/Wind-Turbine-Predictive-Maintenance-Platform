@@ -5,11 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "wind-turbine-pm"
 version = "1.0.0"
-description = "Wind Turbine Predictive Maintenance Platform - Failure Prediction Module"
+description = "Wind Turbine Predictive Maintenance Platform with failure, health, anomaly and maintenance decision support"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-authors = [{ name = "Ozan Sunger" }]
+authors = [
+    { name = "Ozan Sunger" },
+    { name = "Sahin Birkanli" },
+    { name = "Emir Dikmen" },
+]
 keywords = ["predictive-maintenance", "wind-turbine", "scada", "machine-learning"]
 classifiers = [
     "Programming Language :: Python :: 3.12",
@@ -41,10 +45,23 @@ dev = [
     "httpx>=0.27",
     "ruff>=0.4",
     "pre-commit>=3.6",
+    "bandit>=1.9",
+    "pip-audit>=2.10",
 ]
 
 [project.urls]
 Repository = "https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform"
+
+[tool.uv]
+# SHAP 0.52 caps llvmlite below 0.46 on Intel macOS, which is incompatible
+# with the verified numpy 2.4 / numba 0.66 artifact runtime. The lock targets
+# Linux, Windows, and Apple Silicon macOS explicitly instead of silently
+# selecting an obsolete LLVM stack for every platform.
+environments = [
+    "sys_platform == 'linux'",
+    "sys_platform == 'win32'",
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
