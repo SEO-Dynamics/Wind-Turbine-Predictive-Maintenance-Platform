@@ -126,8 +126,14 @@ Enforced by `ruff` (config in `pyproject.toml`); run `make format` before pushin
 Install the pre-commit hooks so this is automatic:
 
 ```bash
+make install-dev
 pre-commit install
 ```
+
+Runtime and development dependencies are fully and separately locked. Change exact
+direct pins in `requirements-runtime.in` or `requirements-dev.in`, then run `make lock`.
+Never hand-edit the generated `requirements.txt` or `requirements-dev.txt`. Before
+pushing, run both `make lint` and `make security`.
 
 ---
 

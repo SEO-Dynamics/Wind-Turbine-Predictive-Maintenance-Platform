@@ -19,8 +19,11 @@ env/
 .mypy_cache/
 .ipynb_checkpoints/
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
+*.log
+*.pid
 
 # --- Secrets --------------------------------------------------------------
 .env
@@ -28,6 +31,19 @@ htmlcov/
 !.env.example
 *.pem
 *.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_ed25519
+
+# --- Local databases ------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite-journal
 
 # --- Generated data -------------------------------------------------------
 # The full dataset is reproducible from a seed, so it is never committed.

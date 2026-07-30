@@ -1119,7 +1119,9 @@ wind-turbine-predictive-maintenance/
 
 ## 25. Local installation
 
-Requires **Python 3.12+**.
+Requires **Python 3.12+** on Linux, Windows, or Apple Silicon macOS. Intel macOS
+is excluded from the shared lock because SHAP's platform-specific LLVM cap is
+incompatible with the verified NumPy/Numba artifact runtime.
 
 ```bash
 git clone https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform.git
@@ -1128,7 +1130,8 @@ cd wind-turbine-predictive-maintenance
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-make install                     # or: pip install -r requirements.txt && pip install -e . --no-deps
+make install                     # runtime-only, transitively locked dependencies
+# Contributors: make install-dev
 ```
 
 <details>
@@ -1176,7 +1179,9 @@ make dashboard                   # streamlit run dashboard/app.py
 
 | Target | Direct equivalent |
 |---|---|
-| `make install` | `pip install -r requirements.txt && pip install -e . --no-deps` |
+| `make lock` | regenerate hashed runtime and development dependency locks with `uv` |
+| `make install` | `pip install --require-hashes -r requirements.txt && pip install -e . --no-deps` |
+| `make install-dev` | install `requirements-dev.txt` and the editable package |
 | `make data` | `python scripts/generate_synthetic_data.py` |
 | `make prepare` | `python scripts/prepare_data.py` |
 | `make train` | `python scripts/train_failure_model.py` |
@@ -1191,6 +1196,7 @@ make dashboard                   # streamlit run dashboard/app.py
 | `make pipeline-all` | `python scripts/run_all_pipelines.py` |
 | `make test` | `pytest` |
 | `make lint` | `ruff check .` |
+| `make security` | `pip-audit` the runtime lock and Bandit-scan Python sources |
 | `make format` | `ruff format . && ruff check --fix .` |
 | `make api` | `uvicorn wind_turbine_pm.api.main:app --reload` |
 | `make dashboard` | `streamlit run dashboard/app.py` |
@@ -1232,13 +1238,18 @@ docker compose up --build
 ```
 
 Starts the API (`:8000`) and dashboard (`:8501`) from one image, with container health
-checks. Both come up healthy in a few seconds; the first build takes ~2.5 minutes.
+checks. Host ports bind to `127.0.0.1` by default; set `WTPM_BIND_ADDRESS` explicitly
+only when a reviewed network deployment needs a wider bind. Both services come up
+healthy in a few seconds; the first build takes a few minutes.
 
 | Property | Detail |
 |---|---|
 | Base image | `python:3.13-slim` — **matches the training runtime exactly** |
-| Dependencies | Pinned in `requirements.txt`, so the container's scikit-learn is the one that pickled the model |
+| Dependencies | Every runtime dependency and distribution hash is locked in `requirements.txt`; development tools live in `requirements-dev.txt` |
+| Build isolation | Compilers and headers exist only in the builder stage; the final image has no `curl`, compiler, pytest, Ruff, Bandit, or pip-audit |
 | Artifact mounts | **Read-only** — neither service can train or mutate them (verified: writes fail with `Read-only file system`) |
+| Root filesystem | Read-only for API/dashboard, with bounded tmpfs mounts for required ephemeral writes |
+| Container privileges | All Linux capabilities dropped; `no-new-privileges` enabled |
 | User | Non-root (`appuser`, uid 1000) |
 | Training on startup | Never — artifacts are loaded lazily |
 
@@ -1247,8 +1258,11 @@ checks. Both come up healthy in a few seconds; the first build takes ~2.5 minute
 A serialised scikit-learn estimator is only guaranteed to load under the version that
 wrote it, and compose mounts the host's `artifacts/` into the container. An unpinned
 image would happily unpickle a model built by a different scikit-learn and could
-misbehave silently. So `requirements.txt` pins the scientific stack and the image uses
-the same Python minor version as training. As defence in depth, `load_bundle()` compares
+misbehave silently. Exact direct versions live in `requirements-runtime.in`; `make lock`
+resolves them into the fully transitive, hash-verified `requirements.txt`. Development
+dependencies are independently locked so they are never shipped in the serving image.
+The image uses the same Python minor version as training. As defence in depth,
+`load_bundle()` compares
 the runtime's `scikit-learn`/`numpy`/`joblib` versions against those recorded in the
 model metadata and surfaces any mismatch in the logs and in `GET /health`
 (`runtime_warnings`).
@@ -1278,7 +1292,23 @@ ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugin
 
 ---
 
-## 27. Limitations
+## 27. Security
+
+The repository security policy and private reporting route are documented in
+[`SECURITY.md`](SECURITY.md). The bundled services have no authentication or TLS and
+must not be exposed directly to the internet. The secure local default is intentional;
+production ingress, identity, rate limiting, certificate management, and audit logging
+remain deployment responsibilities outside this synthetic-data reference platform.
+
+Run the source and dependency checks locally with:
+
+```bash
+make security
+```
+
+---
+
+## 28. Limitations
 
 **Read this before drawing any conclusion from the numbers above.**
 

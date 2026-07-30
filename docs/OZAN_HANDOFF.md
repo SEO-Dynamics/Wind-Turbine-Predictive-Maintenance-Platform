@@ -415,7 +415,7 @@ Add cross-cutting invariants to `config.validate_config()` if your module needs 
 ```bash
 # Setup
 python -m venv .venv && source .venv/bin/activate
-make install                       # pip install -r requirements.txt && pip install -e . --no-deps
+make install                       # hashed runtime lock + editable package
 # If `import wind_turbine_pm` fails after an editable install:
 export PYTHONPATH=src
 
