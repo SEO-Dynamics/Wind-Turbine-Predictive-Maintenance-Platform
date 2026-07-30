@@ -9,6 +9,11 @@ from datetime import UTC, datetime
 import pandas as pd
 
 from wind_turbine_pm.anomaly.config import load_anomaly_config
+from wind_turbine_pm.anomaly.evaluation import (
+    plot_anomaly_calibration,
+    plot_anomaly_model_comparison,
+    plot_maintenance_policy,
+)
 from wind_turbine_pm.anomaly.modeling import (
     anomaly_metrics,
     deterministic_reference_sample,
@@ -30,6 +35,7 @@ from wind_turbine_pm.contracts.anomaly import AnomalyModelMetadata
 from wind_turbine_pm.data.ingestion import is_synthetic
 from wind_turbine_pm.health.health_score import library_versions
 from wind_turbine_pm.logging_config import configure_from_config, get_logger
+from wind_turbine_pm.models.persistence import figures_dir
 from wind_turbine_pm.utils.io import read_json, read_table, write_json, write_table
 from wind_turbine_pm.utils.reproducibility import set_global_seed
 
@@ -138,6 +144,10 @@ def main(argv: list[str] | None = None) -> int:
         },
         metrics_path(cfg),
     )
+    figures = figures_dir(cfg)
+    plot_anomaly_model_comparison(comparison, figures / "anomaly_model_comparison.png")
+    plot_anomaly_calibration(winner.calibration, figures / "anomaly_calibration.png")
+    plot_maintenance_policy(cfg, figures / "maintenance_policy.png")
     logger.info("Published anomaly model", extra={"model": winner.name, **test_metrics})
     print(comparison.round(4).to_string(index=False))  # noqa: T201
     return 0

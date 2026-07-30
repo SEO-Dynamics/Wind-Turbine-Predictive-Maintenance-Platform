@@ -12,5 +12,6 @@ Refresh them after retraining:
 make docs-figures
 ```
 
-The full set (including validation-split curves and the SHAP bar plot) lives in
-`artifacts/figures/` after running `make pipeline`.
+The full set (including validation-split curves, the SHAP bar plot, anomaly
+comparison/calibration and the maintenance-policy figure) lives in
+`artifacts/figures/` after running `make pipeline-all`.

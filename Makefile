@@ -110,9 +110,10 @@ format:  ## Auto-format and auto-fix with ruff
 docs-figures:  ## Refresh the result figures committed under docs/images/
 	@mkdir -p docs/images
 	@for f in pr_curve_test confusion_matrix_test threshold_curve model_comparison \
-	          global_feature_importance shap_summary local_explanation_high_risk; do \
+	          global_feature_importance shap_summary local_explanation_high_risk \
+	          anomaly_model_comparison anomaly_calibration maintenance_policy; do \
 		cp artifacts/figures/$$f.png docs/images/$$f.png 2>/dev/null || \
-			echo "  missing: artifacts/figures/$$f.png (run make pipeline)"; \
+			echo "  missing: artifacts/figures/$$f.png (run make pipeline-all)"; \
 	done
 	@echo "docs/images refreshed"
 

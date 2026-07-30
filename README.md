@@ -938,6 +938,20 @@ The calibration artifact measured a **5.000% warning** and **1.003% alarm** rate
 healthy validation reference. These numbers describe synthetic data, not validated
 real-fleet performance.
 
+### Anomaly evaluation figures
+
+**Candidate comparison on validation** — Local Outlier Factor is the only candidate that
+combines strong recall with materially useful PR-AUC and F2 at the calibrated warning
+threshold. Test data did not participate in this selection.
+
+![Anomaly candidate performance](docs/images/anomaly_model_comparison.png)
+
+**Healthy-reference calibration** — warning and alarm limits are empirical percentiles,
+not textbook constants. The measured healthy alert rates closely reproduce their 5% and
+1% targets on the validation reference used for calibration.
+
+![Anomaly calibration](docs/images/anomaly_calibration.png)
+
 The unified risk service preserves the complete failure, health and anomaly assessments
 and computes:
 
@@ -960,6 +974,12 @@ severity.
 | `plan_inspection` | Medium risk | 7 days |
 | `urgent_review` | One serious signal / High risk | 48 hours |
 | `immediate_engineering_review` | Controller fault or at least two serious signals | Same shift (8 hours) |
+
+**Maintenance policy** — the chart below visualises configured evidence weights and action
+windows. It documents deterministic policy, not measured maintenance effectiveness;
+guardrails may raise the final severity above the weighted score.
+
+![Maintenance decision policy](docs/images/maintenance_policy.png)
 
 Every action remains advisory; the service does not stop, derate or create a work order.
 Run this module alone with `make anomaly-pipeline`, or all modules with
