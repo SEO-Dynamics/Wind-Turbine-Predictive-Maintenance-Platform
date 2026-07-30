@@ -81,7 +81,9 @@ def plot_anomaly_model_comparison(comparison: pd.DataFrame, path: str | Path) ->
     metrics = ("pr_auc", "recall", "precision", "f2")
     colours = (BLUE, GOLD, ORANGE, OLIVE)
     labels = [
-        f"{_humanize(str(row.model))}\n(selected)" if bool(row.selected) else _humanize(str(row.model))
+        f"{_humanize(str(row.model))}\n(selected)"
+        if bool(row.selected)
+        else _humanize(str(row.model))
         for row in comparison.itertuples()
     ]
 
@@ -132,9 +134,7 @@ def plot_anomaly_model_comparison(comparison: pd.DataFrame, path: str | Path) ->
     return _save(plt, fig, path)
 
 
-def plot_anomaly_calibration(
-    calibration: AnomalyCalibration, path: str | Path
-) -> Path:
+def plot_anomaly_calibration(calibration: AnomalyCalibration, path: str | Path) -> Path:
     """Visualise the empirical healthy-reference calibration contract.
 
     Args:
@@ -188,12 +188,8 @@ def plot_anomaly_calibration(
         fontsize=7,
     )
 
-    target = np.array(
-        [1.0 - calibration.warning_percentile, 1.0 - calibration.alarm_percentile]
-    )
-    measured = np.array(
-        [calibration.achieved_warning_rate, calibration.achieved_alarm_rate]
-    )
+    target = np.array([1.0 - calibration.warning_percentile, 1.0 - calibration.alarm_percentile])
+    measured = np.array([calibration.achieved_warning_rate, calibration.achieved_alarm_rate])
     positions = np.arange(2, dtype=float)
     width = 0.34
     target_bars = right.bar(
@@ -306,7 +302,9 @@ def plot_maintenance_policy(cfg: Config, path: str | Path) -> Path:
     right.invert_yaxis()
     right.set_xlim(0.0, float(hours.max() * 1.18))
     right.set_xlabel("Recommended review window (hours)")
-    right.set_title("Deterministic action windows", loc="left", fontsize=11, fontweight="bold", color=INK)
+    right.set_title(
+        "Deterministic action windows", loc="left", fontsize=11, fontweight="bold", color=INK
+    )
     right.grid(axis="x", color=GRID, linewidth=0.8, alpha=0.8)
     right.set_axisbelow(True)
     right.spines[["top", "right"]].set_visible(False)
