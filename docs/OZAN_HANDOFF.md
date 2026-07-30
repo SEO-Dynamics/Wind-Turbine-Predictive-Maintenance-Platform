@@ -1,9 +1,9 @@
-# Handoff — Failure Prediction and Turbine Health Monitoring
+# Handoff — Failure, Health, Anomaly and Maintenance Decision Support
 
 **From:** Stage 1 — Failure Prediction ([@onurozansunger](https://github.com/onurozansunger))
 and Stage 2 — Turbine Health Monitoring ([@SBRKBNL](https://github.com/SBRKBNL))
-**To:** Stage 3 (Anomaly Detection & Maintenance Decision Support)
-**Branches:** `feature/ozan-failure-prediction` · `feature/turbine-health-monitoring`
+**Stage 3 owner:** [@emirsseven](https://github.com/emirsseven)
+**Branches:** `feature/ozan-failure-prediction` · `feature/turbine-health-monitoring` · `feature/emir-anomaly-detection`
 **Module versions:** failure prediction 1.0.0 · turbine health monitoring 1.0.0
 **Date:** 2026-07-30
 
@@ -591,9 +591,9 @@ Use the service, never the model file:
 from wind_turbine_pm.health.config import get_health_config
 from wind_turbine_pm.services.health_monitoring_service import get_health_service
 
-service = get_health_service()           # process-wide, lazily loaded, cached
+service = get_health_service()  # process-wide, lazily loaded, cached
 if service.is_ready:
-    assessment = service.assess_from_window(window)   # a shared TurbineWindow
+    assessment = service.assess_from_window(window)  # a shared TurbineWindow
 ```
 
 `HealthAssessment` subclasses `BasePrediction`, so it already carries `turbine_id`,
@@ -626,8 +626,8 @@ history the caller supplied, so a short window is less informed rather than wron
 ### 12.2 Bulk scoring and fleet roll-up
 
 ```python
-scored = service.score_frame(dataset, features)   # one row per observation
-summary = service.fleet_summary(scored)           # FleetHealthSummary
+scored = service.score_frame(dataset, features)  # one row per observation
+summary = service.fleet_summary(scored)  # FleetHealthSummary
 ```
 
 `score_frame` returns `turbine_id`, `timestamp`, `operating_regime`,
@@ -714,4 +714,28 @@ Beyond §8:
    fleet, and must be re-derived against real inspection outcomes and the operator's own
    alarm history.
 
-Good luck. 🌬️
+---
+
+## 13. Stage 3 completion notes
+
+The extension points described above are now implemented:
+
+- `anomaly/` owns leakage-safe 72-hour features, IF/LOF/One-Class SVM comparison,
+  healthy-validation empirical calibration and prefixed persistence.
+- `AnomalyPrediction` subclasses `BasePrediction`; its signal deviations explicitly state
+  that they are association evidence, not causal diagnosis.
+- `MaintenanceDecisionService` retains failure, health and anomaly outputs, applies
+  50/30/20 default weights, normalizes missing weights, and returns both `coverage` and
+  `missing_modules`.
+- Guardrails floor risk bands without rewriting component scores. Data quality and drift
+  affect confidence only.
+- Four deterministic advisory actions map to routine cadence, 7 days, 48 hours and same
+  shift.
+- `/anomaly` and `/maintenance` routers, the root registry and `/health` are mounted.
+- The Streamlit “Anomaly & Maintenance” page calls the same services as the API.
+- `scripts/run_all_pipelines.py` runs failure → health → anomaly against one raw fleet;
+  Docker's pipeline profile uses it.
+
+The anomaly calibration and results are documented in
+[`MODEL_CARD_ANOMALY.md`](MODEL_CARD_ANOMALY.md). Generated datasets and artifacts remain
+git-ignored and reproducible.

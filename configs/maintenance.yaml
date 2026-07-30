@@ -1,0 +1,15 @@
+maintenance:
+  version: "1.0.0"
+  weights:
+    failure: 0.50
+    anomaly: 0.30
+    health: 0.20
+  confidence:
+    high_coverage: 1.0
+    medium_coverage: 0.80
+    high_data_quality: 0.90
+    medium_data_quality: 0.75
+  actions:
+    planned_inspection_hours: 168
+    urgent_review_hours: 48
+    immediate_review_hours: 8

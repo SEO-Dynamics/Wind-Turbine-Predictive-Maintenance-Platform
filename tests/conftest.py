@@ -20,6 +20,7 @@ for candidate in (_ROOT, _ROOT / "src"):
     if str(candidate) not in sys.path:
         sys.path.insert(0, str(candidate))
 
+from wind_turbine_pm.anomaly.config import load_anomaly_config  # noqa: E402
 from wind_turbine_pm.config import Config, load_config  # noqa: E402
 from wind_turbine_pm.constants import TARGET_COLUMN, TIMESTAMP, TURBINE_ID  # noqa: E402
 from wind_turbine_pm.data.preprocessing import (  # noqa: E402
@@ -264,6 +265,57 @@ def health_toy_frame(toy_frame: pd.DataFrame) -> pd.DataFrame:
         else:
             degradation.append(0.0)
     frame["degradation_level"] = degradation
+    return frame
+
+
+# ---------------------------------------------------------------------------
+# Anomaly Detection and Maintenance Decision Support
+# ---------------------------------------------------------------------------
+@pytest.fixture(scope="session")
+def anomaly_config() -> Config:
+    """The complete Stage 3 configuration exactly as shipped."""
+    return load_anomaly_config()
+
+
+@pytest.fixture(scope="session")
+def small_anomaly_config(anomaly_config: Config, small_health_config: Config) -> Config:
+    """A fast Stage 3 configuration sharing the small fleet and split boundaries."""
+    data = anomaly_config.to_dict()
+    small = small_health_config.to_dict()
+    data["synthetic"] = small["synthetic"]
+    data["split"] = small["split"]
+    data["random_seed"] = small["random_seed"]
+    data["validation"]["min_rows_per_turbine"] = small["validation"]["min_rows_per_turbine"]
+    anomaly = data["anomaly"]
+    anomaly["features"]["dynamic_sensors"] = [
+        "vibration",
+        "gearbox_temperature",
+        "oil_pressure",
+        "power_output",
+    ]
+    anomaly["features"]["windows_hours"] = [6, 12, 24]
+    anomaly["features"]["diff_hours"] = [6, 12]
+    anomaly["features"]["slope_hours"] = [12, 24]
+    anomaly["features"]["regime_baseline_min_periods"] = 12
+    anomaly["features"]["max_history_hours"] = 24
+    anomaly["serving"]["min_history_hours"] = 24
+    anomaly["training"]["max_reference_rows"] = 500
+    anomaly["training"]["candidates"]["isolation_forest"]["params"].update(
+        {"n_estimators": 30, "max_samples": 128, "n_jobs": 1}
+    )
+    anomaly["training"]["candidates"]["local_outlier_factor"]["params"].update(
+        {"n_neighbors": 12, "n_jobs": 1}
+    )
+    return Config(data)
+
+
+@pytest.fixture
+def anomaly_toy_frame(health_toy_frame: pd.DataFrame) -> pd.DataFrame:
+    """Two-turbine history with anomaly evaluation truth kept outside features."""
+    frame = health_toy_frame.copy()
+    frame["failure_mode"] = None
+    frame["episode_id"] = None
+    frame["hours_to_failure"] = pd.NA
     return frame
 
 

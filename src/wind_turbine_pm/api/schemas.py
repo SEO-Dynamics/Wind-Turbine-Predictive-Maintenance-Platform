@@ -290,6 +290,86 @@ class HealthExampleResponse(BaseModel):
     min_history_hours: float
 
 
+# ---------------------------------------------------------------------------
+# Anomaly Detection and Maintenance Decision Support
+# ---------------------------------------------------------------------------
+class AnomalyModelInfoResponse(BaseModel):
+    """Response of ``GET /anomaly/model-info``."""
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+    model_name: str
+    model_version: str
+    algorithm: str
+    training_date: datetime
+    n_features: int
+    warning_threshold: float
+    alarm_threshold: float
+    dataset: dict[str, Any]
+    selection_rationale: str
+    library_versions: dict[str, str]
+    advisory_only: Literal[True] = True
+
+
+class AnomalyMetricsResponse(BaseModel):
+    """Response of ``GET /anomaly/metrics``."""
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+    model_version: str
+    metrics: dict[str, Any]
+    warning_healthy_alert_rate: float
+    alarm_healthy_alert_rate: float
+    is_synthetic: bool
+    disclaimer: str = (
+        "Novelty thresholds and metrics are calibrated on synthetic healthy history. "
+        "They are advisory and require fleet-specific validation before operational use."
+    )
+
+
+class AnomalyFeatureListResponse(BaseModel):
+    """Response of ``GET /anomaly/features``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    n_features: int
+    features: list[str]
+    feature_groups: dict[str, list[str]]
+    excluded_truth_columns: list[str]
+    max_lookback_hours: int
+
+
+class AnomalyExampleResponse(BaseModel):
+    """Response of ``GET /anomaly/example``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    window_request: dict[str, Any]
+    min_history_hours: float
+
+
+class MaintenancePolicyResponse(BaseModel):
+    """Response of ``GET /maintenance/policy``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: str
+    weights: dict[str, float]
+    actions: dict[str, Any]
+    guardrails: dict[str, list[str]]
+    advisory_only: Literal[True] = True
+
+
+class MaintenanceExampleResponse(BaseModel):
+    """Response of ``GET /maintenance/example``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    window_request: dict[str, Any]
+    minimum_history_hours: float
+    note: str
+
+
 class ErrorResponse(BaseModel):
     """Structured error body returned for every handled failure."""
 

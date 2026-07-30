@@ -7,7 +7,7 @@
 #   Dashboard  http://localhost:8501
 #
 # Neither service trains a model. Build the artifacts once on the host with
-#   python scripts/run_failure_pipeline.py
+#   python scripts/run_all_pipelines.py
 # (or run the one-shot `pipeline` profile below); both services read them from
 # the mounted ./artifacts and ./data directories.
 # ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ services:
     image: wind-turbine-pm:latest
     container_name: wtpm-pipeline
     profiles: ["pipeline"]
-    command: ["python", "scripts/run_failure_pipeline.py"]
+    command: ["python", "scripts/run_all_pipelines.py"]
     environment:
       WTPM_PROJECT_ROOT: /app
     volumes:

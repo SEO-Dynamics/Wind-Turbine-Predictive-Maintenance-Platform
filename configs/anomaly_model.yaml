@@ -1,0 +1,100 @@
+# Stage 3 anomaly-detection configuration. Every key is namespaced so this
+# file can be deep-merged with the failure and health configurations safely.
+anomaly:
+  module: anomaly_detection
+  version: "1.0.0"
+
+  target:
+    evaluation_column: degradation_level
+    positive_from: 0.20
+    healthy_max: 0.0
+    exclude_states: [maintenance, fault]
+
+  features:
+    sensors:
+      - wind_speed
+      - rotor_speed
+      - generator_speed
+      - power_output
+      - generator_temperature
+      - gearbox_temperature
+      - bearing_temperature
+      - oil_temperature
+      - oil_pressure
+      - vibration
+      - ambient_temperature
+      - nacelle_temperature
+      - hydraulic_pressure
+      - brake_temperature
+    dynamic_sensors:
+      - vibration
+      - gearbox_temperature
+      - bearing_temperature
+      - generator_temperature
+      - oil_temperature
+      - oil_pressure
+      - hydraulic_pressure
+      - power_output
+      - rotor_speed
+    windows_hours: [6, 24, 72]
+    rolling_stats: [mean, std]
+    diff_hours: [6, 24]
+    slope_hours: [24, 72]
+    regime_baseline_min_periods: 24
+    max_history_hours: 72
+    exclude_columns:
+      - degradation_level
+      - failure_event
+      - maintenance_event
+      - failure_within_48h
+      - health_score_target
+      - failure_mode
+      - episode_id
+      - hours_to_failure
+
+  training:
+    max_reference_rows: 20000
+    candidates:
+      isolation_forest:
+        enabled: true
+        params:
+          n_estimators: 250
+          max_samples: 4096
+          contamination: auto
+          n_jobs: -1
+      local_outlier_factor:
+        enabled: true
+        params:
+          n_neighbors: 35
+          novelty: true
+          contamination: auto
+          n_jobs: -1
+      one_class_svm:
+        enabled: true
+        params:
+          kernel: rbf
+          gamma: scale
+          nu: 0.05
+    selection:
+      primary_metric: recall
+      tie_breakers: [pr_auc, f2, latency_ms]
+
+  calibration:
+    warning_healthy_rate: 0.05
+    alarm_healthy_rate: 0.01
+
+  serving:
+    min_history_hours: 72
+    max_batch_turbines: 200
+    top_k_signals: 5
+
+  artifacts:
+    model: anomaly_model.joblib
+    metadata: anomaly_model_metadata.json
+    calibration: anomaly_score_calibration.json
+    metrics: anomaly_metrics.json
+    comparison: anomaly_model_comparison.csv
+    reference: anomaly_reference.parquet
+    dataset: anomaly_dataset.parquet
+    features: anomaly_features.parquet
+    feature_spec: anomaly_feature_spec.json

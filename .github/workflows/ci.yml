@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["main", "develop", "feature/**"]
+    branches: ["main", "feature/**"]
   pull_request:
-    branches: ["main", "develop"]
+    branches: ["main"]
   workflow_dispatch:
 
 concurrency:
@@ -65,6 +65,7 @@ jobs:
           available = [p.label for p in app.PAGES if p.available]
           print(len(app.PAGES), 'dashboard pages;', len(available), 'available:', available)
           assert 'Turbine Health Monitoring' in available, available
+          assert 'Anomaly & Maintenance' in available, available
           "
 
       - name: API health check (no model artifacts present)
@@ -82,10 +83,15 @@ jobs:
           body = json.load(open('health.json'))
           assert body['status'] in ('ok', 'degraded'), body
           assert 'model_loaded' in body, body
-          # Both modules must report their own artifact status, and each must be
+          # Every module must report its own artifact status, and each must be
           # able to serve independently of the other.
           modules = body['modules']
-          for name in ('failure_prediction', 'turbine_health_monitoring'):
+          for name in (
+              'failure_prediction',
+              'turbine_health_monitoring',
+              'anomaly_detection',
+              'unified_maintenance_decision',
+          ):
               assert name in modules, modules
               assert 'model_loaded' in modules[name], modules[name]
           print('health OK:', body['status'], {k: v['model_loaded'] for k, v in modules.items()})
@@ -115,7 +121,7 @@ jobs:
 
       - name: Smoke-test the health pipeline on the same dataset
         # Runs against the dataset the failure smoke test just generated, without
-        # --force, which is what proves the two modules describe the same fleet
+        # --force, which is what proves the modules describe the same fleet
         # rather than each regenerating their own.
         if: matrix.python-version == '3.13'
         run: |
@@ -160,6 +166,32 @@ jobs:
           assert saturated < 0.5, f'{saturated:.1%} of rows take the maximum drift penalty'
           "
 
+      - name: Smoke-test the anomaly pipeline on the same dataset
+        if: matrix.python-version == '3.13'
+        run: |
+          python scripts/run_anomaly_pipeline.py --strict
+          test -f artifacts/models/anomaly_model.joblib
+          test -f artifacts/models/anomaly_reference.parquet
+          test -f artifacts/metadata/anomaly_model_metadata.json
+          test -f artifacts/metadata/anomaly_score_calibration.json
+          test -f artifacts/metrics/anomaly_metrics.json
+          test -f data/processed/anomaly_dataset.parquet
+          test -f data/processed/anomaly_features.parquet
+
+      - name: Verify measured healthy anomaly alert rates
+        if: matrix.python-version == '3.13'
+        run: |
+          python -c "
+          import json
+          document = json.load(open('artifacts/metrics/anomaly_metrics.json'))
+          calibration = document['calibration']
+          warning = calibration['achieved_warning_rate']
+          alarm = calibration['achieved_alarm_rate']
+          print(f'healthy alert rates: warning={warning:.2%}, alarm={alarm:.2%}')
+          assert 0.035 <= warning <= 0.065, warning
+          assert 0.004 <= alarm <= 0.016, alarm
+          "
+
       - name: Health API check
         if: matrix.python-version == '3.13'
         run: |
@@ -180,6 +212,28 @@ jobs:
           print('health assess OK:', assessment['health_score'], assessment['health_class'])
           "
 
+      - name: Anomaly and maintenance API check
+        if: matrix.python-version == '3.13'
+        run: |
+          python -c "
+          from fastapi.testclient import TestClient
+          from wind_turbine_pm.api.main import app
+
+          client = TestClient(app)
+          health = client.get('/health').json()
+          assert health['modules']['anomaly_detection']['model_loaded'], health
+          example = client.get('/anomaly/example').json()['window_request']
+          anomaly = client.post('/anomaly/detect', json=example)
+          assert anomaly.status_code == 200, anomaly.text
+          assessment = client.post('/maintenance/assess', json=example)
+          assert assessment.status_code == 200, assessment.text
+          body = assessment.json()
+          assert body['advisory_only'] is True
+          assert body['coverage'] == 1.0, body
+          assert set(body['component_scores']) == {'failure', 'anomaly', 'health'}, body
+          print('maintenance assess OK:', body['risk_level'], body['recommendation']['action'])
+          "
+
       - name: Re-run the artifact-dependent tests
         # Many tests skip in the run above because no model exists yet - and they
         # are the ones that matter most: real predictions, batch scoring,
@@ -190,7 +244,10 @@ jobs:
         if: matrix.python-version == '3.13'
         run: |
           pytest -q tests/test_prediction_service.py tests/test_failure_api.py \
-            tests/test_health_service.py tests/test_health_api.py -p no:randomly \
+            tests/test_health_service.py tests/test_health_api.py \
+            tests/test_anomaly_service.py tests/test_anomaly_api.py \
+            tests/test_maintenance_service.py tests/test_maintenance_api.py \
+            -p no:randomly \
             | tee pytest-artifacts.log
           if grep -qE "[0-9]+ skipped" pytest-artifacts.log; then
             echo "::error::Artifact-dependent tests still skipped - artifacts were not picked up"

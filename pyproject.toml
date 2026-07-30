@@ -5,11 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "wind-turbine-pm"
 version = "1.0.0"
-description = "Wind Turbine Predictive Maintenance Platform - Failure Prediction Module"
+description = "Wind Turbine Predictive Maintenance Platform with failure, health, anomaly and maintenance decision support"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-authors = [{ name = "Ozan Sunger" }]
+authors = [
+    { name = "Ozan Sunger" },
+    { name = "Sahin Birkanli" },
+    { name = "Emir Dikmen" },
+]
 keywords = ["predictive-maintenance", "wind-turbine", "scada", "machine-learning"]
 classifiers = [
     "Programming Language :: Python :: 3.12",

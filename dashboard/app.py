@@ -3,8 +3,7 @@
 Run with:
     streamlit run dashboard/app.py
 
-Navigation is driven by :data:`PAGES`, which lists both the modules that exist
-today and the ones planned for later stages.  A future engineer adds a page by
+Navigation is driven by :data:`PAGES`. A future engineer adds a page by
 appending one entry and dropping a module with a ``render()`` function into
 ``dashboard/pages/`` - nothing else in this file changes.
 """
@@ -24,7 +23,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from dashboard.pages import failure_prediction, fleet_health  # noqa: E402
+from dashboard.pages import anomaly_maintenance, failure_prediction, fleet_health  # noqa: E402
 from wind_turbine_pm import __version__  # noqa: E402
 from wind_turbine_pm.constants import ADVISORY_DISCLAIMER  # noqa: E402
 
@@ -39,34 +38,11 @@ class Page:
     note: str = ""
 
 
-def _coming_soon(module: str, description: str) -> Callable[[], None]:
-    """Build a placeholder renderer for a module that is not built yet."""
-
-    def render() -> None:
-        st.title(module)
-        st.info(
-            f"**{module} is planned for a future development stage and is not implemented yet.**"
-        )
-        st.markdown(description)
-        st.caption("See docs/OZAN_HANDOFF.md for the extension points this module should build on.")
-
-    return render
-
-
-#: Dashboard navigation. Future modules append entries here.
+#: Dashboard navigation.
 PAGES: list[Page] = [
     Page("Failure Prediction", failure_prediction.render, available=True),
     Page("Turbine Health Monitoring", fleet_health.render, available=True),
-    Page(
-        "Anomaly Detection",
-        _coming_soon(
-            "Anomaly Detection & Maintenance Decision Support",
-            "- Unsupervised anomaly detection\n- Unified risk score\n"
-            "- Maintenance prioritisation across models",
-        ),
-        available=False,
-        note="Planned - Stage 3",
-    ),
+    Page("Anomaly & Maintenance", anomaly_maintenance.render, available=True),
 ]
 
 
