@@ -164,14 +164,14 @@ def _fleet_snapshot(
     latest = latest_per_turbine(scored, as_of)
     left, right = st.columns(2)
     with left:
-        st.plotly_chart(health_class_distribution(latest), use_container_width=True)
+        st.plotly_chart(health_class_distribution(latest), width="stretch")
     with right:
-        st.plotly_chart(health_score_distribution(latest, bands), use_container_width=True)
+        st.plotly_chart(health_score_distribution(latest, bands), width="stretch")
 
     if summary.worst_turbines:
         st.markdown("**Lowest-scoring turbines**")
         worst = pd.DataFrame(summary.worst_turbines)
-        st.dataframe(worst, use_container_width=True, hide_index=True)
+        st.dataframe(worst, width="stretch", hide_index=True)
 
 
 def _fleet_table(scored: pd.DataFrame, as_of: pd.Timestamp) -> None:
@@ -200,7 +200,7 @@ def _fleet_table(scored: pd.DataFrame, as_of: pd.Timestamp) -> None:
     table["drift_deduction"] = (latest["raw_health_score"] - latest[HEALTH_SCORE]).round(2)
     st.dataframe(
         table.round(2),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             HEALTH_SCORE: st.column_config.ProgressColumn(
@@ -239,7 +239,7 @@ def _turbine_detail(scored: pd.DataFrame, as_of: pd.Timestamp, bands: dict[str, 
     )
 
     history = scored.loc[scored[TURBINE_ID] == turbine].sort_values(TIMESTAMP)
-    st.plotly_chart(health_score_timeline(history, bands), use_container_width=True)
+    st.plotly_chart(health_score_timeline(history, bands), width="stretch")
 
     assessment = _assess_at(turbine, as_of)
     if assessment is None:
@@ -280,7 +280,7 @@ def _turbine_detail(scored: pd.DataFrame, as_of: pd.Timestamp, bands: dict[str, 
             ]
         )
         if not components.empty:
-            st.plotly_chart(component_health_bar(components), use_container_width=True)
+            st.plotly_chart(component_health_bar(components), width="stretch")
     with right:
         st.markdown("**Assessment**")
         st.write(assessment.explanation)
@@ -301,7 +301,7 @@ def _turbine_detail(scored: pd.DataFrame, as_of: pd.Timestamp, bands: dict[str, 
                     for factor in assessment.top_factors
                 ]
             ),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
         st.caption(
@@ -327,7 +327,7 @@ def _turbine_detail(scored: pd.DataFrame, as_of: pd.Timestamp, bands: dict[str, 
                     for violation in assessment.rule_violations
                 ]
             ),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -402,18 +402,14 @@ def _sensor_evidence(service, turbine: str) -> None:
     )
     history = frame.loc[frame[TURBINE_ID] == turbine].sort_values(TIMESTAMP).tail(1200)
     for sensor in chosen:
-        st.plotly_chart(
-            sensor_envelope_timeline(history, sensor, rules[sensor]), use_container_width=True
-        )
+        st.plotly_chart(sensor_envelope_timeline(history, sensor, rules[sensor]), width="stretch")
         rule = rules[sensor]
         st.caption(
             f"Limit provenance: **{rule['source'].replace('_', ' ')}** - {rule['rationale']}"
         )
 
     with st.expander("All sensor validation rules"):
-        st.dataframe(
-            pd.DataFrame(service.sensor_rule_records()), use_container_width=True, hide_index=True
-        )
+        st.dataframe(pd.DataFrame(service.sensor_rule_records()), width="stretch", hide_index=True)
 
 
 def _drift_section(service, scored: pd.DataFrame, turbine: str) -> None:
@@ -449,7 +445,7 @@ def _drift_section(service, scored: pd.DataFrame, turbine: str) -> None:
                     )
                 ]
             ),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
     else:
@@ -481,7 +477,7 @@ def _drift_section(service, scored: pd.DataFrame, turbine: str) -> None:
     history = (
         dataset.loc[mask, [TIMESTAMP]].join(features.loc[mask]).sort_values(TIMESTAMP).tail(1200)
     )
-    st.plotly_chart(drift_statistic_timeline(history, sensor), use_container_width=True)
+    st.plotly_chart(drift_statistic_timeline(history, sensor), width="stretch")
     st.caption(
         "The CUSUM arms reset to zero each time they reach the decision limit (Page's restart), "
         "so the sawtooth pattern is expected: each tooth is one detection. Frequency, not height, "
@@ -506,7 +502,7 @@ def _operating_regimes(scored: pd.DataFrame) -> None:
     if OPERATING_REGIME not in scored.columns:
         st.info("The scored frame carries no operating-regime column.")
         return
-    st.plotly_chart(regime_distribution(regime_summary(scored)), use_container_width=True)
+    st.plotly_chart(regime_distribution(regime_summary(scored)), width="stretch")
 
     quality = load_health_data_quality()
     if quality and "sensor_rules" in quality:
@@ -572,9 +568,7 @@ def _model_performance(bands: dict[str, float]) -> None:
 
     if metrics.get("error_by_band"):
         st.markdown("**Error by true health band**")
-        st.dataframe(
-            pd.DataFrame(metrics["error_by_band"]), use_container_width=True, hide_index=True
-        )
+        st.dataframe(pd.DataFrame(metrics["error_by_band"]), width="stretch", hide_index=True)
         st.caption(
             "Reported per band because a good overall error can be carried entirely by the "
             "healthy majority while the score is unreliable exactly where it has to be trusted."

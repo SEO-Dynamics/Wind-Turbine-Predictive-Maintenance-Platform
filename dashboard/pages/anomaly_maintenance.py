@@ -74,7 +74,7 @@ def render() -> None:
                 for item in assessments
             ]
         )
-        st.dataframe(queue, hide_index=True, use_container_width=True)
+        st.dataframe(queue, hide_index=True, width="stretch")
         turbine_ids = queue["turbine"].tolist()
     else:
         st.warning(
@@ -84,7 +84,7 @@ def render() -> None:
         st.dataframe(
             latest[["turbine_id", "anomaly_score", "anomaly_severity", "operational_status"]],
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
         turbine_ids = latest["turbine_id"].tolist()
 
@@ -135,7 +135,7 @@ def render() -> None:
             ]
         )
         st.markdown("**Independent model evidence**")
-        st.dataframe(evidence, hide_index=True, use_container_width=True)
+        st.dataframe(evidence, hide_index=True, width="stretch")
         st.markdown("**Reasons and target components**")
         for reason in recommendation["reasons"] or ["No guardrail was triggered."]:
             st.write(f"- {reason}")
@@ -157,7 +157,7 @@ def _model_calibration() -> None:
         return
     comparison = pd.DataFrame(document.get("candidates", []))
     if not comparison.empty:
-        st.dataframe(comparison, hide_index=True, use_container_width=True)
+        st.dataframe(comparison, hide_index=True, width="stretch")
     calibration = document["calibration"]
     rates = pd.DataFrame(
         {

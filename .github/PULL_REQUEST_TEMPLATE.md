@@ -12,7 +12,7 @@
 
 ## Shared contracts
 
-- [ ] This PR does **not** touch anything listed in `docs/OZAN_HANDOFF.md` §9
+- [ ] This PR does **not** touch anything listed in `docs/OZAN_STAGE1_HANDOFF.md` §9
 - [ ] It does touch a shared contract — described below, and coordinated with the other
       stages
 

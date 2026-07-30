@@ -139,7 +139,7 @@ def _executive_summary(service, scored: pd.DataFrame, as_of: pd.Timestamp) -> No
             ("Model version", service.model_version, f"Algorithm: {service.metadata.algorithm}"),
         ]
     )
-    st.plotly_chart(risk_distribution(latest), use_container_width=True)
+    st.plotly_chart(risk_distribution(latest), width="stretch")
 
 
 def _fleet_table(scored: pd.DataFrame, as_of: pd.Timestamp) -> None:
@@ -176,7 +176,7 @@ def _fleet_table(scored: pd.DataFrame, as_of: pd.Timestamp) -> None:
     )
     st.dataframe(
         table,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Failure probability": st.column_config.ProgressColumn(
@@ -234,7 +234,7 @@ def _turbine_detail(service, scored: pd.DataFrame) -> None:
     low_max, medium_max = service.risk_bands
     st.plotly_chart(
         probability_timeline(turbine_rows, service.threshold, low_max, medium_max),
-        use_container_width=True,
+        width="stretch",
     )
 
     raw = load_raw_sample()
@@ -246,7 +246,7 @@ def _turbine_detail(service, scored: pd.DataFrame) -> None:
             & (raw_rows[TIMESTAMP] <= turbine_rows[TIMESTAMP].max())
         ]
         st.plotly_chart(
-            sensor_timeline(window, sensors, f"{turbine} sensor trends"), use_container_width=True
+            sensor_timeline(window, sensors, f"{turbine} sensor trends"), width="stretch"
         )
 
     latest_row = turbine_rows.iloc[-1]
@@ -297,7 +297,7 @@ def _local_explanation(service, latest_row: pd.Series, turbine: str) -> None:
                 for factor in prediction.top_risk_factors
             ]
         )
-        st.plotly_chart(risk_factor_bar(factors), use_container_width=True)
+        st.plotly_chart(risk_factor_bar(factors), width="stretch")
     else:
         st.caption("_No feature-level attribution was available for this observation._")
 
@@ -335,7 +335,7 @@ def _model_performance() -> None:
         for split, values in evaluation.items()
         if isinstance(values, dict)
     }
-    st.dataframe(pd.DataFrame(rows).T, use_container_width=True)
+    st.dataframe(pd.DataFrame(rows).T, width="stretch")
     st.caption(
         "Accuracy is deliberately omitted as a headline metric: with a ~2% positive rate, "
         "predicting 'no failure' everywhere already scores ~98%."
@@ -390,7 +390,7 @@ def _model_performance() -> None:
                     for name, info in candidates.items()
                 }
             ).T
-            st.dataframe(table, use_container_width=True)
+            st.dataframe(table, width="stretch")
         st.info(metrics.get("selection_rationale", ""))
 
 
@@ -399,7 +399,7 @@ def _explainability() -> None:
     st.subheader("Explainability")
     importance = load_global_importance()
     if importance is not None:
-        st.plotly_chart(global_importance_bar(importance), use_container_width=True)
+        st.plotly_chart(global_importance_bar(importance), width="stretch")
     else:
         missing_artifact_notice("Global feature importance", EVALUATE_COMMAND)
 
@@ -432,7 +432,7 @@ def _explainability() -> None:
             sample = raw.dropna(subset=["wind_speed", "power_output"]).sample(
                 min(8000, len(raw)), random_state=0
             )
-            st.plotly_chart(power_curve_scatter(sample), use_container_width=True)
+            st.plotly_chart(power_curve_scatter(sample), width="stretch")
 
 
 def _limitations(service) -> None:

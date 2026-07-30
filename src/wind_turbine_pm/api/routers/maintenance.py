@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 
+from wind_turbine_pm.anomaly.config import get_anomaly_config
 from wind_turbine_pm.api.dependencies import (
     MaintenanceServiceDep,
     ReadyMaintenanceServiceDep,
@@ -49,7 +50,7 @@ def example(service: MaintenanceServiceDep) -> MaintenanceExampleResponse:
     """Return a request covering the longest currently available model history."""
     minimum = _minimum_history(service)
     return MaintenanceExampleResponse(
-        window_request=example_window(minimum),
+        window_request=example_window(minimum, cfg=get_anomaly_config()),
         minimum_history_hours=minimum,
         note=(
             "The same raw window is sent to every available component model. "

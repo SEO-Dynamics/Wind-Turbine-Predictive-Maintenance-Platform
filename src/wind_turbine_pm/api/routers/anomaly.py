@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 
+from wind_turbine_pm.anomaly.config import get_anomaly_config
 from wind_turbine_pm.api.dependencies import ReadyAnomalyServiceDep
 from wind_turbine_pm.api.examples import example_window
 from wind_turbine_pm.api.schemas import (
@@ -91,7 +92,7 @@ def example(service: ReadyAnomalyServiceDep) -> AnomalyExampleResponse:
     """Return a ready-to-post raw SCADA window."""
     minimum = service.minimum_history_hours()
     return AnomalyExampleResponse(
-        window_request=example_window(minimum),
+        window_request=example_window(minimum, cfg=get_anomaly_config()),
         min_history_hours=minimum,
     )
 

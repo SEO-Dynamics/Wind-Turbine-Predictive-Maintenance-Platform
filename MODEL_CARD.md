@@ -125,7 +125,7 @@ readings, 0.08% duplicate records, and a small number of records with missing ke
 
 ### Physical assumptions
 
-Documented in [README §8](README.md#8-dataset): power curve, drivetrain gearing, thermal
+Documented in [README - Dataset](README.md#dataset): power curve, drivetrain gearing, thermal
 inertia via first-order lag, lubrication pressure–temperature coupling, load- and
 condition-dependent vibration, per-turbine baselines.
 
@@ -157,7 +157,7 @@ For observation *t* of turbine *k*: **1** if any `failure_event == 1` occurs for
 
 Edge cases (per-turbine isolation, the failure row itself, end-of-timeline, fault and
 maintenance states, post-repair transients, repeated labelling) are documented in
-[README §10](README.md#10-target-definition) and pinned by 13 tests.
+[README - Target definition](README.md#target-definition) and pinned by 13 tests.
 
 ---
 
@@ -494,7 +494,7 @@ The pipeline has been verified to reproduce identically inside Docker
 
 **Module owner:** Failure Prediction Module (Stage 1).
 **Repository:** https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform
-**Handoff documentation:** [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md)
+**Handoff documentation:** [`docs/PROJECT_HANDOFF.md`](docs/PROJECT_HANDOFF.md)
 
 Report issues with the model, its documentation or its outputs through the repository's
 issue tracker. Concerns about unsafe or out-of-scope use should be escalated to the

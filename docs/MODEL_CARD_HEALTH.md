@@ -51,7 +51,7 @@ It is not a failure predictor. It carries no horizon and makes no claim about *w
 anything will fail. A turbine can be Healthy with a high failure probability (a sudden fault
 signature on an otherwise sound machine) or Degraded with a low one (worn but not near
 failure). Both are operationally meaningful; see
-[`OZAN_HANDOFF.md`](OZAN_HANDOFF.md) §12.3 before combining the two.
+[`SAHIN_STAGE2_HANDOFF.md`](SAHIN_STAGE2_HANDOFF.md) before combining the two.
 
 ---
 
@@ -472,7 +472,7 @@ guaranteed to load under the version that wrote it.
 **Module owner:** Turbine Health Monitoring Module (Stage 2) —
 [@SBRKBNL](https://github.com/SBRKBNL).
 **Repository:** https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform
-**Handoff documentation:** [`OZAN_HANDOFF.md`](OZAN_HANDOFF.md) — §12 is this module's contract
+**Handoff documentation:** [`SAHIN_STAGE2_HANDOFF.md`](SAHIN_STAGE2_HANDOFF.md) — this module's contract
 
 Report issues with the model, its documentation or its outputs through the repository's issue
 tracker. Concerns about unsafe or out-of-scope use should be escalated to the module owner and
