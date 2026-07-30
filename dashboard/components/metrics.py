@@ -121,7 +121,7 @@ def show_figure(path, caption: str, fallback_command: str) -> None:
         fallback_command: Command that produces the figure.
     """
     if path is not None and path.is_file():
-        st.image(str(path), caption=caption, use_container_width=True)
+        st.image(str(path), caption=caption, width="stretch")
     else:
         st.caption(f"_{caption} is not available._")
         st.code(fallback_command, language="bash")

@@ -3,18 +3,72 @@
 [![CI](https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
-[![Tests](https://img.shields.io/badge/tests-425%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-429%20passing-brightgreen.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Data: synthetic](https://img.shields.io/badge/data-synthetic-orange.svg)](#9-synthetic-data-disclosure)
-[![Status: advisory only](https://img.shields.io/badge/status-advisory%20only-red.svg)](#27-limitations)
+[![Data: synthetic](https://img.shields.io/badge/data-synthetic-orange.svg)](#synthetic-data-disclosure)
+[![Status: advisory only](https://img.shields.io/badge/status-advisory%20only-red.svg)](#limitations)
 
-> **Three integrated modules — Failure Prediction, Turbine Health Monitoring, and Anomaly
-> Detection & Maintenance Decision Support.** They share one SCADA contract, API,
-> dashboard and deployment image while retaining separate evidence and artifact readiness.
+**An end-to-end predictive-maintenance platform for wind turbines: it predicts failures
+48 hours ahead, scores current turbine health, flags abnormal behaviour, and turns all
+three into a single advisory maintenance priority — from SCADA sensor data.**
+
+> ⚠️ **Advisory decision support, trained on synthetic data.** Not a certified safety
+> system, not a substitute for a qualified maintenance engineer, and it never acts on
+> plant by itself. See [Limitations](#limitations).
 
 ---
 
-## 3. Executive summary
+## What it does
+
+Three modules answer four operational questions about the same fleet, from the same
+SCADA history, behind one API and one dashboard.
+
+| # | Module | Question it answers | Owner | Status |
+|---|---|---|---|---|
+| 1 | **Failure Prediction** | *Will this turbine fail in the next 48 hours?* | [Ozan](https://github.com/onurozansunger) | ✅ Complete |
+| 2 | **Turbine Health Monitoring** | *What condition is it in, and is it drifting?* | [Şahin](https://github.com/SBRKBNL) | ✅ Complete |
+| 3 | **Anomaly & Maintenance Decision** | *Is behaviour abnormal — and what should be inspected, when?* | [Emir](https://github.com/emirdikmen) | ✅ Complete |
+
+## Headline results
+
+Synthetic data, held-out test splits, produced by `make pipeline-all`. Full detail in
+[Evaluation results](#evaluation-results).
+
+| Module | Selected model | Key metric | Value |
+|---|---|---|---|
+| Failure Prediction | HistGradientBoosting | PR-AUC / recall / F2 | **0.597** / **0.843** / **0.702** |
+| Turbine Health Monitoring | Ridge regression | Health-score MAE (test) | **6.46** / 100 (R² 0.863) |
+| Anomaly Detection | Local Outlier Factor | PR-AUC / recall | **0.725** / **0.693** |
+
+At a 2.2% failure base rate, the failure model catches **84% of failures** while flagging
+5.5% of observations; a stratified dummy scores PR-AUC 0.024 on the same data.
+
+## Quick start
+
+Requires **Python 3.12+**.
+
+```bash
+git clone https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform.git
+cd Wind-Turbine-Predictive-Maintenance-Platform
+python -m venv .venv && source .venv/bin/activate
+
+make install-dev      # runtime + test/lint tooling
+make pipeline-all     # generate data, then train all three modules (~5 min)
+make test             # 429 tests
+
+make api              # http://localhost:8000/docs
+make dashboard        # http://localhost:8501
+```
+
+Or run the whole stack in containers — no local Python needed:
+
+```bash
+docker compose up --build
+```
+
+---
+
+## Executive summary
 
 Three modules answer complementary questions about the same fleet, from the same SCADA
 history:
@@ -28,10 +82,10 @@ history:
   when?"* Calibrates novelty against healthy validation history, preserves all three source
   assessments, and applies an explicit advisory maintenance policy.
 
-Both are production-shaped rather than notebooks: physics-grounded data generation, a
+All three are production-shaped rather than notebooks: physics-grounded data generation, a
 validation layer, leakage-safe feature engineering, chronological validation with an
 embargo, compared model families with guard-railed selection, grounded explanations,
-reusable services, one FastAPI backend, one Streamlit dashboard, 425 tests, Docker and CI.
+reusable services, one FastAPI backend, one Streamlit dashboard, 429 tests, Docker and CI.
 
 **Failure Prediction — held-out test data (synthetic):**
 
@@ -63,11 +117,11 @@ A mean-prediction baseline reaches MAE 11.58 and MAE-on-degraded 58.67, so the s
 learned. Selection is led by error **on degraded observations** rather than overall error,
 because 88% of observations are healthy and an overall figure is carried by that majority.
 
-**All output is advisory.** See [Limitations](#27-limitations).
+**All output is advisory.** See [Limitations](#limitations).
 
 ---
 
-## 4. Business problem
+## Business problem
 
 Unplanned wind turbine failures cause downtime, lost generation, emergency call-outs,
 cascading component damage and avoidable safety exposure. Corrective repairs are
@@ -87,7 +141,7 @@ three explicit design decisions in this module:
 
 ---
 
-## 5. Module scope
+## Module scope
 
 **Failure Prediction — in scope, implemented and working:**
 
@@ -130,7 +184,7 @@ module model cards and a handoff contract.
 
 ---
 
-## 6. Key features
+## Key features
 
 | Area | What it does |
 |---|---|
@@ -148,7 +202,7 @@ module model cards and a handoff contract.
 
 ---
 
-## 7. System architecture
+## System architecture
 
 All modules share ingestion, validation, cleaning, operating regimes, temporal split
 boundaries and one raw dataset, then retain their own features, artifacts and services.
@@ -214,7 +268,7 @@ never silently replaced with zero risk.
 
 ---
 
-## 8. Dataset
+## Dataset
 
 **Decision:** no wind-turbine SCADA dataset with a public, stable, no-authentication
 download endpoint was available that could be wired in without scraping or manual cookie
@@ -278,7 +332,7 @@ the validation layer is exercised against real problems rather than mocks.
 
 ---
 
-## 9. Synthetic data disclosure
+## Synthetic data disclosure
 
 > **All results in this README, in `artifacts/`, in the dashboard and in the API are
 > produced on synthetic data generated by this project.** They are not measured from real
@@ -300,11 +354,11 @@ data:
 ```
 
 The file must satisfy the column contract in
-[`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md). Nothing downstream changes.
+[`docs/PROJECT_HANDOFF.md`](docs/PROJECT_HANDOFF.md). Nothing downstream changes.
 
 ---
 
-## 10. Target definition
+## Target definition
 
 ```
 failure_within_48h
@@ -330,7 +384,7 @@ including an exact assertion that hourly data yields exactly 48 positives per fa
 
 ---
 
-## 11. Leakage prevention
+## Leakage prevention
 
 Six structural defences, each backed by tests:
 
@@ -360,7 +414,7 @@ A useful sanity signal: the strongest univariate feature-target correlation is �
 
 ---
 
-## 12. Feature engineering
+## Feature engineering
 
 395 features in 7 groups, all produced by the single entry point
 `build_failure_features()` — the same function used in training, in the API and in the
@@ -389,7 +443,7 @@ them; with multiple years of data, seasonality would be worth revisiting.
 
 ---
 
-## 13. Temporal validation
+## Temporal validation
 
 A random split would be invalid here twice over: consecutive SCADA rows are strongly
 autocorrelated, and the label looks 48 hours forward.
@@ -418,7 +472,7 @@ time T, how well does the model do afterwards?*
 
 ---
 
-## 14. Model comparison
+## Model comparison
 
 Validation-split results at each candidate's own optimised threshold:
 
@@ -437,7 +491,7 @@ trade-off, taken deliberately.
 
 ---
 
-## 15. Final model selection
+## Final model selection
 
 **Selected: `HistGradientBoostingClassifier`** (sigmoid-calibrated), version 1.0.0.
 
@@ -469,7 +523,7 @@ sub-percent differences.
 
 ---
 
-## 16. Threshold optimisation
+## Threshold optimisation
 
 The default 0.50 is meaningless for a class-weighted rare-event classifier — it is an
 artefact of the loss function, not an operating decision. Two methods are implemented and
@@ -505,7 +559,7 @@ the other methods would have chosen. Curve: `artifacts/figures/threshold_curve.p
 
 ---
 
-## 17. Evaluation results
+## Evaluation results
 
 All figures below were generated by executed code and read from
 `artifacts/metrics/failure_metrics.json`. **Synthetic data.**
@@ -574,7 +628,7 @@ Metrics are saved as JSON (`artifacts/metrics/failure_metrics.json`) and CSV
 
 ---
 
-## 18. Explainability
+## Explainability
 
 SHAP `TreeExplainer` (exact for the selected model), with a `PermutationExplainer` and
 then scikit-learn permutation importance as documented fallbacks.
@@ -620,7 +674,7 @@ filler.
 
 ---
 
-## 19. Risk levels
+## Risk levels
 
 Probability bands are configurable and deliberately **independent of the binary decision
 threshold** — a 0.06 threshold does not imply everything above 0.06 is "high risk".
@@ -636,7 +690,7 @@ model metadata contract.
 
 ---
 
-## 20. Advisory recommendations
+## Advisory recommendations
 
 | Risk | Message |
 |---|---|
@@ -649,7 +703,7 @@ language ("shut down", "automatically", "guaranteed").
 
 ---
 
-## 21. Turbine Health Monitoring Module
+## Turbine Health Monitoring Module
 
 The second module. It shares the platform's data contract, cleaning layer, feature
 primitives and validation, and adds a condition-scoring pipeline of its own. Everything it
@@ -859,7 +913,7 @@ in failure → health → anomaly order against one dataset.
 
 ---
 
-## 21.5 Anomaly Detection & Maintenance Decision Support
+## Anomaly Detection & Maintenance Decision Support
 
 Anomaly detection is trained only on valid, healthy train rows outside known
 `fault`/`maintenance` controller states. The offline evaluation label is
@@ -913,7 +967,7 @@ Run this module alone with `make anomaly-pipeline`, or all modules with
 
 ---
 
-## 22. API
+## API
 
 FastAPI with Pydantic validation and Swagger docs at `/docs`. **The API never trains a
 model** — artifacts are loaded lazily, so it starts cleanly even with none present and
@@ -1018,7 +1072,7 @@ assessment — and returning a silently partial one would be worse than not offe
 
 ---
 
-## 23. Dashboard
+## Dashboard
 
 Streamlit, at `http://localhost:8501`. Navigation exposes all three working module pages.
 
@@ -1084,7 +1138,7 @@ No dashboard page duplicates prediction logic: each calls the same service used 
 
 ---
 
-## 24. Project structure
+## Project structure
 
 ```
 wind-turbine-predictive-maintenance/
@@ -1112,12 +1166,13 @@ wind-turbine-predictive-maintenance/
 │   └── utils/                     # io · paths · reproducibility
 ├── dashboard/{app.py,pages/{failure_prediction,fleet_health,anomaly_maintenance},...}
 ├── tests/
-└── docs/{OZAN_HANDOFF.md,MODEL_CARD_HEALTH.md,MODEL_CARD_ANOMALY.md}
+└── docs/{PROJECT_HANDOFF.md,OZAN_STAGE1_HANDOFF.md,SAHIN_STAGE2_HANDOFF.md,
+    │        EMIR_STAGE3_HANDOFF.md,MODEL_CARD_HEALTH.md,MODEL_CARD_ANOMALY.md}
 ```
 
 ---
 
-## 25. Local installation
+## Local installation
 
 Requires **Python 3.12+** on Linux, Windows, or Apple Silicon macOS. Intel macOS
 is excluded from the shared lock because SHAP's platform-specific LLVM cap is
@@ -1208,7 +1263,7 @@ make dashboard                   # streamlit run dashboard/app.py
 ### Testing
 
 ```bash
-make test                        # 425 tests
+make test                        # 429 tests
 ```
 
 Covering all modules: synthetic data determinism and physics · validation findings ·
@@ -1231,7 +1286,7 @@ then re-runs them, failing if any still skip.
 
 ---
 
-## 26. Docker usage
+## Docker usage
 
 ```bash
 docker compose up --build
@@ -1292,7 +1347,7 @@ ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugin
 
 ---
 
-## 27. Security
+## Security
 
 The repository security policy and private reporting route are documented in
 [`SECURITY.md`](SECURITY.md). The bundled services have no authentication or TLS and
@@ -1308,7 +1363,7 @@ make security
 
 ---
 
-## 28. Limitations
+## Limitations
 
 **Read this before drawing any conclusion from the numbers above.**
 
@@ -1372,22 +1427,22 @@ make security
 
 ---
 
-## 28. Development status
+## Development status
 
 | Stage | Module | Scope | Status |
 |---|---|---|---|
 | 1 | **Failure Prediction** | 48-hour failure risk, explanation, advisory output | ✅ **Complete** |
 | 2 | **Turbine Health Monitoring** | Condition scoring, health classification, component roll-up, operating regimes, sensor drift detection | ✅ **Complete** |
-| 3 | **Anomaly Detection & Decision Support** | Healthy-reference novelty, unified evidence, maintenance prioritisation | ✅ **Implemented** |
+| 3 | **Anomaly Detection & Decision Support** | Healthy-reference novelty, unified evidence, maintenance prioritisation | ✅ **Complete** |
 
 The implementation remains intentionally extensible: every model owns a namespaced config
 and prefixed artifacts, all consume `TurbineWindow`, and routers register through
-`MODULE_ROUTERS`. See [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) for the cross-module
+`MODULE_ROUTERS`. See [`docs/PROJECT_HANDOFF.md`](docs/PROJECT_HANDOFF.md) for the cross-module
 contract and Stage 3 completion notes.
 
 ---
 
-## 29. Ethical and operational considerations
+## Ethical and operational considerations
 
 - **Human oversight is required.** Every output is advisory and carries a disclaimer
   naming the need for review by a qualified maintenance engineer.
@@ -1410,7 +1465,7 @@ contract and Stage 3 completion notes.
 
 ---
 
-## 30. Contributors
+## Contributors
 
 A three-stage collaborative project. Each stage is a self-contained module built on the
 contracts the previous one published.
@@ -1425,7 +1480,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution and ownership rule
 
 ---
 
-## 31. License
+## License
 
 [MIT](LICENSE).
 
@@ -1437,9 +1492,10 @@ Provided as-is, without warranty. Not certified for safety-critical industrial u
 
 | Document | Contents |
 |---|---|
+| [`CHANGELOG.md`](CHANGELOG.md) | Release history and what the pre-release audit fixed |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, branching, definition of done, platform non-negotiables |
 | [`MODEL_CARD.md`](MODEL_CARD.md) | Failure Prediction: intended use, out-of-scope use, metrics, risks, oversight, retraining |
 | [`docs/MODEL_CARD_HEALTH.md`](docs/MODEL_CARD_HEALTH.md) | Turbine Health Monitoring: the same, plus the drift-calibration analysis |
 | [`docs/MODEL_CARD_ANOMALY.md`](docs/MODEL_CARD_ANOMALY.md) | Anomaly model: healthy reference, empirical calibration, results, limitations and oversight |
-| [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) | Data, feature, artifact and API contracts plus Stage 3 completion notes |
+| [`docs/PROJECT_HANDOFF.md`](docs/PROJECT_HANDOFF.md) | Data, feature, artifact and API contracts plus Stage 3 completion notes |
 | [`notebooks/01_failure_prediction_eda.ipynb`](notebooks/01_failure_prediction_eda.ipynb) | Exploratory analysis and the leakage discussion |

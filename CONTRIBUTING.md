@@ -9,7 +9,7 @@ must preserve their shared contracts and independent artifact readiness.
 | 2 | Turbine Health Monitoring | [@SBRKBNL](https://github.com/SBRKBNL) | `feature/turbine-health-monitoring` | ✅ Complete |
 | 3 | Anomaly Detection & Decision Support | [@emirsseven](https://github.com/emirsseven) | `feature/emir-anomaly-detection` | ✅ Implemented |
 
-**Before writing any code, read [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md).** It
+**Before writing any code, read [`docs/PROJECT_HANDOFF.md`](docs/PROJECT_HANDOFF.md).** It
 documents the data, feature, artifact and API contracts your module must respect, the
 extension points to build on, and the files that must not change without coordination.
 §12 is the Turbine Health Monitoring contract, including how to combine a health
@@ -23,15 +23,18 @@ Requires **Python 3.12+**.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-make install
+make install-dev       # runtime deps + pytest/ruff/pre-commit
 make pipeline-all      # failure -> health -> anomaly on one shared raw fleet
-make test
+make test              # 429 tests
 ```
 
 `make pipeline-all` runs failure, health and anomaly pipelines in order against **one**
 shared raw dataset. Downstream pipelines deliberately do not regenerate the data. Run
 them separately with `make pipeline`, `make health-pipeline` or `make anomaly-pipeline`
 if you only need one.
+
+`make install` installs the runtime lock only and does **not** include `pytest` or
+`ruff` — use `make install-dev` for contributing.
 
 If `import wind_turbine_pm` fails after the editable install (happens on some sandboxed
 macOS shells), use `export PYTHONPATH=src`.
@@ -56,7 +59,7 @@ A module is not finished until all of these hold:
 - [ ] New temporal features have a **leakage test** (see
       `tests/test_failure_features.py::test_no_future_leakage` and
       `tests/test_health_features.py::test_no_feature_reads_the_future`)
-- [ ] Nothing in [`docs/OZAN_HANDOFF.md`](docs/OZAN_HANDOFF.md) §9 ("files you should not
+- [ ] Nothing in [`docs/OZAN_STAGE1_HANDOFF.md`](docs/OZAN_STAGE1_HANDOFF.md) §9 ("files you should not
       change unnecessarily") was modified without agreement
 - [ ] Model outputs subclass `BasePrediction` and keep `advisory_only: true`
 - [ ] Configuration lives under a single top-level namespace for your module, so a
