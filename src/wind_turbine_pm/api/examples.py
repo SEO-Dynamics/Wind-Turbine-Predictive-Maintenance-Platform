@@ -124,11 +124,12 @@ def _window_from_generator(n_points: int, turbine_id: str, cfg: Config) -> dict[
         }
         for column in SENSOR_COLUMNS:
             value = record.get(column)
-            if value is None or (isinstance(value, float) and not np.isfinite(value)):
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
                 payload[column] = None
             else:
-                payload[column] = round(float(value), 3)
-        payload[OPERATIONAL_STATUS] = str(record.get(OPERATIONAL_STATUS, OperationalStatus.NORMAL))
+                payload[column] = None if not np.isfinite(numeric) else round(numeric, 3)
         observations.append(payload)
 
     return {"turbine_id": turbine_id, "observations": observations}
