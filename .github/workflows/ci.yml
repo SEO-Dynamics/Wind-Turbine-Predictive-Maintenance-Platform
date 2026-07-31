@@ -257,6 +257,9 @@ jobs:
 
           root = ET.parse("pytest-report.xml").getroot()
           suite = root if root.tag == "testsuite" else root.find("testsuite")
+          if suite is None:
+              sys.exit("::error::pytest-report.xml has no <testsuite> element")
+
           skipped = int(suite.get("skipped", 0))
           passed = (
               int(suite.get("tests", 0))
@@ -271,19 +274,31 @@ jobs:
                   "the smoke-test artifacts were not picked up."
               )
 
-          match = re.search(r"tests-(\d+)%20passing", Path("README.md").read_text())
-          if match is None:
-              sys.exit("::error::Could not find the test-count badge in README.md")
-          documented = int(match.group(1))
+          # Every place the count is published. Checking only the badge would let the
+          # other files drift, which is exactly the bug this guard exists to prevent.
+          sources = {
+              "README.md": r"tests-(\d+)%20passing",
+              "CONTRIBUTING.md": r"make test\s+#\s*(\d+) tests",
+              "docs/PROJECT_HANDOFF.md": r"make test\s+#\s*(\d+) tests",
+              "docs/OZAN_STAGE1_HANDOFF.md": r"\((\d+) tests,",
+          }
+          stale, missing = [], []
+          for name, pattern in sources.items():
+              text = Path(name).read_text()
+              found = {int(m) for m in re.findall(pattern, text)}
+              if not found:
+                  missing.append(name)
+              elif found != {passed}:
+                  stale.append(f"{name} says {sorted(found)}")
 
-          print(f"documented={documented} actual={passed}")
-          if documented != passed:
+          if missing:
+              sys.exit(f"::error::No test count found in: {', '.join(missing)}")
+          if stale:
               sys.exit(
-                  f"::error::README claims {documented} tests but the suite runs {passed}. "
-                  "Update README.md (badge, quick start, summary), CONTRIBUTING.md, "
-                  "docs/PROJECT_HANDOFF.md and docs/OZAN_STAGE1_HANDOFF.md."
+                  f"::error::The suite runs {passed} tests but " + "; ".join(stale) + ". "
+                  "Update every one of them."
               )
-          print(f"All {passed} tests ran with artifacts; documented count matches.")
+          print(f"All {passed} tests ran with artifacts; every documented count matches.")
           CHECK
 
       - name: Upload artifacts on failure
