@@ -238,32 +238,16 @@ jobs:
           print('maintenance assess OK:', body['risk_level'], body['recommendation']['action'])
           "
 
-      - name: Re-run the artifact-dependent tests
-        # Many tests skip in the run above because no model exists yet - and they
-        # are the ones that matter most: real predictions, batch scoring,
-        # explanation schema, risk-band mapping, health assessments, the drift
-        # calibration and runtime/artifact version compatibility. Now that both
-        # smoke tests have produced artifacts, run them for real so CI actually
-        # validates trained models end to end.
-        if: matrix.python-version == '3.13'
-        run: |
-          pytest -q tests/test_prediction_service.py tests/test_failure_api.py \
-            tests/test_health_service.py tests/test_health_api.py \
-            tests/test_anomaly_service.py tests/test_anomaly_api.py \
-            tests/test_maintenance_service.py tests/test_maintenance_api.py \
-            -p no:randomly \
-            | tee pytest-artifacts.log
-          if grep -qE "[0-9]+ skipped" pytest-artifacts.log; then
-            echo "::error::Artifact-dependent tests still skipped - artifacts were not picked up"
-            exit 1
-          fi
-
-      - name: Check the documented test count is current
-        # The count appears in the README badge, the quick start, CONTRIBUTING and
-        # the handoff docs. It has drifted twice already because a module was added
-        # without updating them, so fail here rather than ship a stale badge.
-        # Parsed from the JUnit report, not from pytest's human-readable summary,
-        # which is formatted for people and not stable to grep.
+      - name: Re-run the full suite against real artifacts
+        # Two things in one run, deliberately.
+        #
+        # 1. Many tests skip in the earlier `Pytest` step because no model exists
+        #    yet, and they are the ones that matter most: real predictions, batch
+        #    scoring, explanation schema, risk-band mapping, health assessments,
+        #    the drift calibration and runtime/artifact version compatibility.
+        #    Now that the smoke tests have produced artifacts, they run for real.
+        # 2. The same run emits the JUnit report used to verify the documented
+        #    test count, so the count check costs no extra suite execution.
         if: matrix.python-version == '3.13'
         run: |
           pytest -q -p no:randomly --junit-xml=pytest-report.xml
@@ -273,15 +257,21 @@ jobs:
 
           root = ET.parse("pytest-report.xml").getroot()
           suite = root if root.tag == "testsuite" else root.find("testsuite")
+          skipped = int(suite.get("skipped", 0))
           passed = (
               int(suite.get("tests", 0))
-              - int(suite.get("skipped", 0))
+              - skipped
               - int(suite.get("failures", 0))
               - int(suite.get("errors", 0))
           )
 
-          readme = Path("README.md").read_text()
-          match = re.search(r"tests-(\d+)%20passing", readme)
+          if skipped:
+              sys.exit(
+                  f"::error::{skipped} test(s) still skipped with artifacts present - "
+                  "the smoke-test artifacts were not picked up."
+              )
+
+          match = re.search(r"tests-(\d+)%20passing", Path("README.md").read_text())
           if match is None:
               sys.exit("::error::Could not find the test-count badge in README.md")
           documented = int(match.group(1))
@@ -293,7 +283,7 @@ jobs:
                   "Update README.md (badge, quick start, summary), CONTRIBUTING.md, "
                   "docs/PROJECT_HANDOFF.md and docs/OZAN_STAGE1_HANDOFF.md."
               )
-          print(f"Documented test count matches ({passed}).")
+          print(f"All {passed} tests ran with artifacts; documented count matches.")
           CHECK
 
       - name: Upload artifacts on failure
