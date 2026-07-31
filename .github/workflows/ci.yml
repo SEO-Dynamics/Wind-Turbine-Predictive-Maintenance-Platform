@@ -238,25 +238,68 @@ jobs:
           print('maintenance assess OK:', body['risk_level'], body['recommendation']['action'])
           "
 
-      - name: Re-run the artifact-dependent tests
-        # Many tests skip in the run above because no model exists yet - and they
-        # are the ones that matter most: real predictions, batch scoring,
-        # explanation schema, risk-band mapping, health assessments, the drift
-        # calibration and runtime/artifact version compatibility. Now that both
-        # smoke tests have produced artifacts, run them for real so CI actually
-        # validates trained models end to end.
+      - name: Re-run the full suite against real artifacts
+        # Two things in one run, deliberately.
+        #
+        # 1. Many tests skip in the earlier `Pytest` step because no model exists
+        #    yet, and they are the ones that matter most: real predictions, batch
+        #    scoring, explanation schema, risk-band mapping, health assessments,
+        #    the drift calibration and runtime/artifact version compatibility.
+        #    Now that the smoke tests have produced artifacts, they run for real.
+        # 2. The same run emits the JUnit report used to verify the documented
+        #    test count, so the count check costs no extra suite execution.
         if: matrix.python-version == '3.13'
         run: |
-          pytest -q tests/test_prediction_service.py tests/test_failure_api.py \
-            tests/test_health_service.py tests/test_health_api.py \
-            tests/test_anomaly_service.py tests/test_anomaly_api.py \
-            tests/test_maintenance_service.py tests/test_maintenance_api.py \
-            -p no:randomly \
-            | tee pytest-artifacts.log
-          if grep -qE "[0-9]+ skipped" pytest-artifacts.log; then
-            echo "::error::Artifact-dependent tests still skipped - artifacts were not picked up"
-            exit 1
-          fi
+          pytest -q -p no:randomly --junit-xml=pytest-report.xml
+          python - <<'CHECK'
+          import re, sys, xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          root = ET.parse("pytest-report.xml").getroot()
+          suite = root if root.tag == "testsuite" else root.find("testsuite")
+          if suite is None:
+              sys.exit("::error::pytest-report.xml has no <testsuite> element")
+
+          skipped = int(suite.get("skipped", 0))
+          passed = (
+              int(suite.get("tests", 0))
+              - skipped
+              - int(suite.get("failures", 0))
+              - int(suite.get("errors", 0))
+          )
+
+          if skipped:
+              sys.exit(
+                  f"::error::{skipped} test(s) still skipped with artifacts present - "
+                  "the smoke-test artifacts were not picked up."
+              )
+
+          # Every place the count is published. Checking only the badge would let the
+          # other files drift, which is exactly the bug this guard exists to prevent.
+          sources = {
+              "README.md": r"tests-(\d+)%20passing",
+              "CONTRIBUTING.md": r"make test\s+#\s*(\d+) tests",
+              "docs/PROJECT_HANDOFF.md": r"make test\s+#\s*(\d+) tests",
+              "docs/OZAN_STAGE1_HANDOFF.md": r"\((\d+) tests,",
+          }
+          stale, missing = [], []
+          for name, pattern in sources.items():
+              text = Path(name).read_text()
+              found = {int(m) for m in re.findall(pattern, text)}
+              if not found:
+                  missing.append(name)
+              elif found != {passed}:
+                  stale.append(f"{name} says {sorted(found)}")
+
+          if missing:
+              sys.exit(f"::error::No test count found in: {', '.join(missing)}")
+          if stale:
+              sys.exit(
+                  f"::error::The suite runs {passed} tests but " + "; ".join(stale) + ". "
+                  "Update every one of them."
+              )
+          print(f"All {passed} tests ran with artifacts; every documented count matches.")
+          CHECK
 
       - name: Upload artifacts on failure
         if: failure()

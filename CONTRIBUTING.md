@@ -25,7 +25,7 @@ Requires **Python 3.12+**.
 python -m venv .venv && source .venv/bin/activate
 make install-dev       # runtime deps + pytest/ruff/pre-commit
 make pipeline-all      # failure -> health -> anomaly on one shared raw fleet
-make test              # 429 tests
+make test              # 432 tests
 ```
 
 `make pipeline-all` runs failure, health and anomaly pipelines in order against **one**

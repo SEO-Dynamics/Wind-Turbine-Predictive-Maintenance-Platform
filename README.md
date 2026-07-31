@@ -3,7 +3,7 @@
 [![CI](https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/SEO-Dynamics/Wind-Turbine-Predictive-Maintenance-Platform/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
-[![Tests](https://img.shields.io/badge/tests-429%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-432%20passing-brightgreen.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Data: synthetic](https://img.shields.io/badge/data-synthetic-orange.svg)](#synthetic-data-disclosure)
 [![Status: advisory only](https://img.shields.io/badge/status-advisory%20only-red.svg)](#limitations)
@@ -54,7 +54,7 @@ python -m venv .venv && source .venv/bin/activate
 
 make install-dev      # runtime + test/lint tooling
 make pipeline-all     # generate data, then train all three modules (~5 min)
-make test             # 429 tests
+make test             # 432 tests
 
 make api              # http://localhost:8000/docs
 make dashboard        # http://localhost:8501
@@ -85,7 +85,7 @@ history:
 All three are production-shaped rather than notebooks: physics-grounded data generation, a
 validation layer, leakage-safe feature engineering, chronological validation with an
 embargo, compared model families with guard-railed selection, grounded explanations,
-reusable services, one FastAPI backend, one Streamlit dashboard, 429 tests, Docker and CI.
+reusable services, one FastAPI backend, one Streamlit dashboard, 432 tests, Docker and CI.
 
 **Failure Prediction — held-out test data (synthetic):**
 
@@ -1283,7 +1283,7 @@ make dashboard                   # streamlit run dashboard/app.py
 ### Testing
 
 ```bash
-make test                        # 429 tests
+make test                        # 432 tests
 ```
 
 Covering all modules: synthetic data determinism and physics · validation findings ·

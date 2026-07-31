@@ -74,3 +74,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# JUnit report produced by the CI test-count check
+pytest-report.xml
