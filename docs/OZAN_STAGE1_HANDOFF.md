@@ -73,7 +73,7 @@ stable and safe to build on. Read §9 before changing anything.
 | **Service** | `HealthMonitoringService` — the single assessment path, window and prepared modes | `services/health_monitoring_service.py` |
 | API | 6 endpoints under `/health-monitoring` | `api/routers/health_monitoring.py` |
 | Dashboard | Fleet Health page, 7 sections | `dashboard/pages/fleet_health.py` |
-| Tests | 369 tests total (~210 of them health), deterministic | `tests/` |
+| Tests | 432 tests across all three modules, deterministic | `tests/` |
 
 ---
 
@@ -452,7 +452,7 @@ make api                           # uvicorn wind_turbine_pm.api.main:app --relo
 make dashboard                     # streamlit run dashboard/app.py
 
 # Quality
-make test                          # pytest        (369 tests, ~70 s)
+make test                          # pytest        (432 tests, ~30 s)
 make lint                          # ruff check .
 make format                        # ruff format . && ruff check --fix .
 

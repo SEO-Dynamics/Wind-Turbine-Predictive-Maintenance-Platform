@@ -120,7 +120,7 @@ time and surfaces mismatches in logs and in `GET /health`.
 ```bash
 make install-dev      # runtime + pytest/ruff  (make install omits the dev tooling)
 make pipeline-all     # one shared raw dataset -> failure -> health -> anomaly
-make test             # 429 tests
+make test             # 432 tests
 make lint
 
 make api              # http://localhost:8000/docs

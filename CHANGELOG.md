@@ -67,7 +67,7 @@ end to end on synthetic data.
   lazily so the API starts and reports `degraded` when a model is missing.
 - One Streamlit dashboard with three module pages that degrade to actionable messages
   rather than crashing when artifacts are absent.
-- 429 tests, ruff lint and format, multi-stage Dockerfile with a non-root user and
+- 432 tests, ruff lint and format, multi-stage Dockerfile with a non-root user and
   read-only artifact mounts, GitHub Actions CI covering lint, tests, pipeline smoke test
   and Docker build.
 - Runtime/artifact library-version compatibility check surfaced in `GET /health`.
@@ -85,7 +85,7 @@ end to end on synthetic data.
   It now documents `make install-dev`.
 - Dashboard used `use_container_width`, removed from Streamlit after 2025-12-31, which
   produced a deprecation warning on every chart and table render. Replaced with `width`.
-- README: referred to three modules as "Both", claimed 425 tests (actual 429), started
+- README: referred to three modules as "Both", claimed a stale test count, started
   section numbering at 3, had two sections numbered 28, and marked Stage 3
   "Implemented" while Stages 1–2 said "Complete". Headings are now unnumbered, counts are
   accurate, and a recruiter-facing first screen was added.
