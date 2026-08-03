@@ -6,7 +6,7 @@
 # the hashed runtime lock, application wheel, and no compiler, curl, or test
 # tooling. Model artifacts and generated data remain external volume mounts.
 # ---------------------------------------------------------------------------
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
@@ -30,7 +30,7 @@ COPY src/ ./src/
 RUN python -m pip wheel --no-deps --wheel-dir /wheels .
 
 
-FROM python:3.13-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
