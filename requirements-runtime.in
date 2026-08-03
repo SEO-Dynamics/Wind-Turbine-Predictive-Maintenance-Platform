@@ -10,7 +10,7 @@
 
 # Core numerical / data stack
 numpy==2.4.6
-pandas==2.3.3
+pandas==3.0.5
 scipy==1.18.0
 pyarrow==24.0.0
 
@@ -33,7 +33,7 @@ matplotlib==3.11.1
 plotly==6.9.0
 
 # API
-fastapi==0.141.0
+fastapi==0.141.1
 uvicorn[standard]==0.52.0
 
 # Dashboard
