@@ -10,8 +10,8 @@
 
 # Core numerical / data stack
 numpy==2.4.6
-pandas==2.3.3
-scipy==1.18.0
+pandas==3.0.5
+scipy==1.18.1
 pyarrow==24.0.0
 
 # Machine learning
@@ -26,16 +26,16 @@ llvmlite==0.48.0
 # Configuration and validation
 PyYAML==6.0.3
 pydantic==2.13.4
-python-dotenv==1.2.2
+python-dotenv==1.2.3
 
 # Visualisation
 matplotlib==3.11.1
-plotly==6.9.0
+plotly==7.0.0
 
 # API
-fastapi==0.141.0
-uvicorn[standard]==0.52.0
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
 
 # Dashboard
-streamlit==1.60.0
+streamlit==1.62.0
 watchdog==6.0.0
