@@ -10,32 +10,32 @@
 
 # Core numerical / data stack
 numpy==2.4.6
-pandas==2.3.3
-scipy==1.18.0
+pandas==3.0.6
+scipy==1.18.1
 pyarrow==24.0.0
 
 # Machine learning
-scikit-learn==1.9.0
-joblib==1.5.3
+scikit-learn==1.9.1
+joblib==1.6.0
 
 # Explainability
-shap==0.52.0
+shap==0.53.0
 numba==0.66.0
 llvmlite==0.48.0
 
 # Configuration and validation
 PyYAML==6.0.3
-pydantic==2.13.4
-python-dotenv==1.2.2
+pydantic==2.14.1
+python-dotenv==1.2.4
 
 # Visualisation
-matplotlib==3.11.1
-plotly==6.9.0
+matplotlib==3.11.2
+plotly==7.1.0
 
 # API
-fastapi==0.141.0
-uvicorn[standard]==0.52.0
+fastapi==0.143.2
+uvicorn[standard]==0.54.0
 
 # Dashboard
-streamlit==1.60.0
+streamlit==1.66.0
 watchdog==6.0.0
