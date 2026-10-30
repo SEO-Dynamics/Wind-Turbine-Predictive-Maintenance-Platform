@@ -135,6 +135,7 @@ pre-commit install
 
 Runtime and development dependencies are fully and separately locked. Change exact
 direct pins in `requirements-runtime.in` or `requirements-dev.in`, then run `make lock`.
+Minimum fixed versions for transitive packages live in `requirements-security.in`.
 Never hand-edit the generated `requirements.txt` or `requirements-dev.txt`. Before
 pushing, run both `make lint` and `make security`.
 
