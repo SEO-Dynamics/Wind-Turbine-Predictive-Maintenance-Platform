@@ -52,7 +52,10 @@ RUN python -m pip install \
         --find-links=/wheels \
         --no-deps \
         wind-turbine-pm \
-    && rm -rf /wheels
+    # Installation is finished. The runtime does not need pip or its bundled
+    # installer; their vendored packages are outside the application lock.
+    && python -m pip uninstall -y pip \
+    && rm -rf /wheels /usr/local/lib/python3.13/ensurepip
 
 # Runtime application files. The Python package itself is installed from the
 # wheel built above; source and test tooling are not copied into this stage.

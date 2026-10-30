@@ -375,6 +375,8 @@ jobs:
             ! command -v cc &&
             ! command -v gcc &&
             ! command -v curl &&
+            ! python -c "import pip" 2>/dev/null &&
+            ! python -c "import ensurepip" 2>/dev/null &&
             ! python -c "import bandit" 2>/dev/null &&
             ! python -c "import pytest" 2>/dev/null
           '
