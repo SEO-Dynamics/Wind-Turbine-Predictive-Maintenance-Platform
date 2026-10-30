@@ -101,6 +101,7 @@ lint:  ## Lint with ruff
 
 security:  ## Audit runtime dependencies and statically scan Python sources
 	$(PYTHON) -m pip_audit --disable-pip --no-deps -r requirements.txt
+	$(PYTHON) -m pip_audit --disable-pip --no-deps -r requirements-dev.txt
 	$(PYTHON) -m bandit -q -r src scripts dashboard
 
 format:  ## Auto-format and auto-fix with ruff

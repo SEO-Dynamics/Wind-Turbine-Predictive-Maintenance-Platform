@@ -1,0 +1,9 @@
+# Minimum fixed versions from the runtime and development dependency audits.
+# Constraints do not install a package if it is no longer required.
+certifi>=2026.10.18
+gitpython>=3.2.1
+pillow>=13.0.0
+urllib3>=2.8.0
+filelock>=4.2.1
+virtualenv>=21.14.9
+msgpack>=1.2.3

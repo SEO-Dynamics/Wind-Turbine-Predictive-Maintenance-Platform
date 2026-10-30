@@ -337,6 +337,9 @@ jobs:
       - name: Audit the locked runtime dependency graph
         run: python -m pip_audit --disable-pip --no-deps -r requirements.txt
 
+      - name: Audit the locked development dependency graph
+        run: python -m pip_audit --disable-pip --no-deps -r requirements-dev.txt
+
       - name: Scan Python sources
         run: python -m bandit -q -r src scripts dashboard
 
@@ -372,6 +375,8 @@ jobs:
             ! command -v cc &&
             ! command -v gcc &&
             ! command -v curl &&
+            ! python -c "import pip" 2>/dev/null &&
+            ! python -c "import ensurepip" 2>/dev/null &&
             ! python -c "import bandit" 2>/dev/null &&
             ! python -c "import pytest" 2>/dev/null
           '
